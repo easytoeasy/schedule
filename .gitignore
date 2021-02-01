@@ -3,5 +3,6 @@
 /vendor/
 composer.lock
 /src/db/cache/
+/src/tests/*.log
 
 
