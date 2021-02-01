@@ -2,7 +2,7 @@
 <html lang="en">
 
 <head>
-  <meta charset="utf-8">
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
   <title>cron定时任务进程管理</title>
   <link href="css/supervisor.css" rel="stylesheet" type="text/css">
   <link href="images/icon.png" rel="icon" type="image/png">
