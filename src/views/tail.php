@@ -3,7 +3,7 @@
 
 <head>
 	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-	<title id="title">Guarder Status</title>
+	<title id="title">Schedule Status</title>
 </head>
 
 <body>

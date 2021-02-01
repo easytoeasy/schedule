@@ -21,6 +21,20 @@
 
       <ul class="clr" id="buttons">
         <li class="action-button"><a href="tail.php" target="_blank">logfile</a></li>
+        <li class="action-button"><a href="index.html?action=clear">clear</a></li>
+        <li class="action-button">
+          <select id='tagid' onchange="tagChange()">
+            <option value="0">全部</option>
+            <?php
+            $searchTagid = isset($_GET['tagid']) ? $_GET['tagid'] : 0;
+            foreach ($this->servTags as $id => $name) {
+              $selected = '';
+              if ($searchTagid == $id) {$selected = 'selected';}
+              echo sprintf("<option %s value=%s>%s</option>", $selected, $id, $name);
+            }
+            ?>
+          </select>
+        </li>
       </ul>
 
       <table cellspacing="0">
@@ -38,11 +52,17 @@
 
           use pzr\schedule\State;
 
-          if ($this->taskers) foreach ($this->taskers as $c) { ?>
+          
+          if ($this->taskers)
+            foreach ($this->taskers as $c) {
+              if ($searchTagid && $c->tag_id != $searchTagid) {
+                continue;
+              }
+          ?>
             <tr class="">
               <td class="status"><span class="status<?= State::css($c->state) ?>"><?= State::desc($c->state) ?></span></td>
-              <td><span>pid <?= $c->pid ?>, <?= $c->uptime ?>, <?=$c->refcount?></span></td>
-              <td><a><?= $c->name ?></a></td>
+              <td><span>pid <?= $c->pid ?>, <?= $c->uptime ?>, <?= $c->refcount ?></span></td>
+              <td><a>id:<?= $c->id ?> <?= $c->name ?> <?= $c->tag_id ?></a></td>
               <td class="action">
                 <ul>
                   <li>
@@ -60,5 +80,12 @@
 
     </div>
 </body>
+<script>
+  function tagChange() {
+    var obj = document.getElementById('tagid'); //定位id
+    var index = obj.selectedIndex; // 选中索引
+    window.location.href = 'index.php?tagid=' + index;
+  }
+</script>
 
 </html>

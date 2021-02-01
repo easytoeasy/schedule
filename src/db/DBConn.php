@@ -2,10 +2,13 @@
 
 namespace pzr\schedule\db;
 
+use Doctrine\Common\Cache\FilesystemCache;
+use Doctrine\DBAL\Cache\QueryCacheProfile;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use Doctrine\DBAL\Query\QueryBuilder;
 use ErrorException;
+use Exception;
 use Monolog\Logger;
 use pzr\schedule\Helper;
 use pzr\schedule\IniParser;
@@ -16,8 +19,6 @@ class DBConn
     protected static $conns = array();
 
     protected $module;
-    /** @var Connection */
-    protected $conn;
     /** @var QueryBuilder */
     protected $queryBuilder;
 
@@ -28,7 +29,6 @@ class DBConn
     {
         $this->logger = Helper::getLogger('DBConn');
         $this->module = $module;
-        $this->conn = $this->getConn();
     }
 
     /**
@@ -40,19 +40,40 @@ class DBConn
         if (empty($this->module))
             throw new ErrorException('module is empty');
 
-        if (isset(self::$conns[$this->module])) {
-            if (self::$conns[$this->module] instanceof Connection) {
-                return self::$conns[$this->module];
-            }
-        }
+        /**
+         * 会丢失数据库连接
+         */
+        // $conn = isset(self::$conns[$this->module]) ? self::$conns[$this->module] : null;
+        // if ($conn instanceof Connection) {
+        //     return $conn;
+        // }
 
         $dbConfig = IniParser::getConfig();
         if (!isset($dbConfig[$this->module]))
             throw new ErrorException(sprintf("undifined '[%s]' in db config", $this->module));
 
-        $conn = DriverManager::getConnection($dbConfig[$this->module]);
-        self::$conns[$this->module] = $conn;
+        $conn = self::$conns[$this->module] = DriverManager::getConnection($dbConfig[$this->module]);
+        $cache = new \Doctrine\Common\Cache\ArrayCache();
+        $config = $conn->getConfiguration();
+        $config->setResultCacheImpl($cache);
         return $conn;
+    }
+
+    public function executeCacheQuery(int $cachetime = 120, $params = [], $types = [])
+    {
+        $conn = $this->getConn();
+        $query = $this->queryBuilder->getSQL();
+        $cache = new FilesystemCache(__DIR__ . '/cache');
+
+        $key = md5(sprintf(
+            "%s%s%s",
+            $query,
+            !empty($params) ? json_encode($params) : '',
+            !empty($types) ? json_encode($types) : ''
+        ));
+        $stmt = $conn->executeCacheQuery($query, $params, $types, new QueryCacheProfile($cachetime, $key, $cache));
+        $data = $stmt->fetchAllAssociative();
+        return $data;
     }
 
     /**
@@ -60,7 +81,8 @@ class DBConn
      */
     public function createQueryBuilder()
     {
-        return $this->queryBuilder = $this->conn->createQueryBuilder();
+        $conn = $this->getConn();
+        return $this->queryBuilder = $conn->createQueryBuilder();
     }
 
     /**
@@ -70,8 +92,10 @@ class DBConn
      */
     public function fetchAll($params = [], $types = [])
     {
+        $conn = $this->getConn();
         $sql = $this->queryBuilder->getSQL();
-        return $this->conn->fetchAllAssociative($sql, $params, $types);
+        $rs = $conn->fetchAllAssociative($sql, $params, $types);
+        return $rs;
     }
 
 

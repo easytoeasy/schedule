@@ -36,22 +36,27 @@ class Process
     protected $db;
     protected $host;
     protected $port;
+    // protected $tags = array();
+    protected $servTags = array();
 
-    public function __construct($serverId = 99)
+    public function __construct($serverId)
     {
+        if (empty($serverId)) {
+            throw new ErrorException('invalid value of serverId');
+        }
         [$this->host, $this->port] = IniParser::getServer($serverId);
         $this->serverId = $serverId;
         $this->ppidFile = IniParser::getPpidFile($serverId);
         $this->logger = Helper::getLogger('process');
-        $this->db = new Db();
-        unset($config);
+        $this->db = new Db('db1');
+        // $this->tags = $this->db->getTags();
     }
 
     public function run()
     {
         // 父进程还在，不让重启
         if ($this->isMasterAlive()) {
-            throw new ErrorException('master still alive');
+            exit('master still alive');
         }
 
         $pid = pcntl_fork();
@@ -66,6 +71,19 @@ class Process
         }
 
         @cli_set_process_title('Schedule: server-' . $this->serverId);
+
+        // set_error_handler(function ($errno, $errstr, $errfile, $errline) {
+        //     if (!(error_reporting(E_ALL & ~E_WARNING & ~E_NOTICE) & $errno)) {
+        //         return false;
+        //     }
+        //     $this->logger->error(sprintf(
+        //         "%s, %s, %s, %s",
+        //         $errno,
+        //         $errstr,
+        //         $errfile,
+        //         $errline
+        //     ));
+        // });
 
         $stream = new Stream($this->host, $this->port);
         $this->stream = $stream;
@@ -118,6 +136,7 @@ class Process
     protected function syncFromDB()
     {
         $taskers = $this->db->getJobs($this->serverId);
+        $this->servTags = $this->db->getServTags();
         $this->logger->debug(sprintf("sync %d records from db", count($taskers)));
 
         if (empty($this->taskers)) {
@@ -125,7 +144,7 @@ class Process
             return;
         }
 
-        // DB里面新增的命令
+        // DB里面变更的命令
         $newAdds = array_diff_key($taskers, $this->taskers);
 
         // 内存中等待被删除的命令
@@ -133,15 +152,16 @@ class Process
 
         if (empty($newAdds) && empty($beDels)) return;
 
+        foreach ($beDels as $key => $value) {
+            $this->logger->debug('taskers del row:' . $value->id);
+            unset($this->taskers[$key]);
+        }
+
         foreach ($newAdds as $key => $value) {
-            $this->logger->debug('taskers add row:' . $key);
+            $this->logger->debug('taskers add row:' . $value->id);
             $this->taskers[$key] = $value;
         }
 
-        foreach ($beDels as $key => $value) {
-            $this->logger->debug('taskers del row:' . $key);
-            unset($this->taskers[$key]);
-        }
         unset($taskers, $newAdds, $beDels);
     }
 
@@ -196,16 +216,24 @@ class Process
 
     protected function handle($md5, $action)
     {
-        if (!empty($action)) {
-            $this->message = sprintf("%s %s at %s", $action, $md5, date('Y-m-d H:i:s'));
-            $this->logger->debug(sprintf("md5:%s, action:%s", $md5, $action));
-        }
         if ($md5 && isset($this->taskers[$md5])) {
             $c = $this->taskers[$md5];
         }
+
+        if (!empty($action)) {
+            $info = $c ? $c->id : 'log';
+            $this->message = sprintf("%s %s at %s", $action, $info, date('Y-m-d H:i:s'));
+            $this->logger->debug(sprintf("md5:%s, action:%s", $info, $action));
+        }
+
         switch ($action) {
             case 'clear':
-                if ($logfile = $c->output) {
+                if (empty($c)) {
+                    [$logfile] = IniParser::getCommLog();
+                } else {
+                    $logfile = $c->output;
+                }
+                if ($logfile) {
                     file_put_contents($logfile, '');
                 }
                 break;
@@ -260,12 +288,11 @@ class Process
     protected function fork(Job &$c)
     {
         $descriptorspec = [];
-        if ($c->output) {
-            $descriptorspec = [
-                2 => ['file', $c->output, 'a'],
-            ];
-        }
-
+        $logfile = $c->output ?: IniParser::getCommLog()[0];
+        $descriptorspec = $logfile ? [
+            1 => ['file', $logfile, 'a'], //stdout
+            2 => ['file', $logfile, 'a']  //error
+            ] : [];
         $process = proc_open('exec ' . $c->command, $descriptorspec, $pipes, $c->directory);
         if ($process) {
             $ret = proc_get_status($process);
@@ -349,9 +376,18 @@ if (PHP_SAPI != 'cli') {
     throw new ErrorException('非cli模式不可用');
 }
 
-try {
-    $cli = new Process();
-    $cli->run();
-} catch (Exception $e) {
-    $cli->logger->error($e);
+// 当前进程创建的文件权限为755
+umask(022);
+
+$serverId = $argv[1];
+if (empty($serverId) || !is_numeric($serverId)) {
+    exit('invalid value of serverId');
 }
+
+try {
+    $cli = new Process($serverId);
+    $cli->run();
+} catch(Exception $e) {
+    echo $e;
+}
+
