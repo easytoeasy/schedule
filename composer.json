@@ -1,0 +1,34 @@
+{
+    "name": "pzr/schedule",
+    "description": "",
+    "keywords": [
+        "amqp",
+        "rabbitmq",
+        "yii"
+    ],
+    "type": "library",
+    "license": "MIT",
+    "minimum-stability": "stable",
+    "authors": [
+        {
+            "name": "pengzhengrong",
+            "email": "easysoeasy@163.com"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "pzr\\schedule\\": "src"
+        }
+    },
+    "require": {
+        "php": ">=7.0.0",
+        "mtdowling/cron-expression": "^1.2",
+        "phpmailer/phpmailer": "^6.2",
+        "yunpian/yunpian-php-sdk": "^1.0",
+        "monolog/monolog": "^2.2",
+        "doctrine/dbal": "^3.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^8.5"
+    }
+}

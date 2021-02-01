@@ -1,0 +1,41 @@
+
+[base]
+; 每个server对应一个pid文件，{%d} 是server_id的占位符
+pidfile = /tmp/schedule{%d}.pid
+; {%d} 是server_id的占位符
+logfile = /var/log/schedule{%d}.log
+; 可选值：DEBUG、INFO、NOTICE、WARNING、ERROR、CRITICAL、ALERT、EMERGENCY
+loglevel = DEBUG
+
+
+;;;;;;;;;;;;;;;SERVER_ID;;;;;;;;;;;;;;;;;
+;; server_id的id会自动解析，格式必须一致
+[server_1]
+; 
+host = 127.0.0.1
+port = 3401
+
+[server_2]
+host = 127.0.0.1
+port = 3402
+
+[server_3]
+host = 127.0.0.1
+port = 3403
+
+; ...
+
+[server_99]
+host = 127.0.0.1
+port = 3499
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+[db1]
+dbname = test
+user = root
+password = 
+host = 'localhost'
+driver = pdo_mysql
+
+

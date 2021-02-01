@@ -1,0 +1,6 @@
+.DS_Store
+/src/config/*.ini
+/vendor/
+composer.lock
+
+
