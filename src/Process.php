@@ -14,9 +14,6 @@ use pzr\schedule\db\Job;
 
 class Process
 {
-
-    /** @var array 配置文件数组*/
-    protected $config;
     /** 待回收子进程 */
     protected $childPids = array();
     /** 待执行的任务数组 */
@@ -25,8 +22,6 @@ class Process
     public $logger;
     /** @var string 操作记录 */
     protected $message = 'Init Process OK';
-    /** @var Stream */
-    protected $stream;
     /** @var string 保存父进程的pid */
     protected $ppidFile;
 
@@ -34,9 +29,9 @@ class Process
     protected $serverId;
     /** @var Db 数据表 */
     protected $db;
-    protected $host;
-    protected $port;
     protected $servTags = array();
+    /** @var Server $server */
+    protected $server;
     /*
      * 主进程每分钟执行，超过的话则记录。
      * 但是鉴于可能存在几秒中的误差是正常的，所以宽限5s
@@ -50,11 +45,11 @@ class Process
         if (empty($serverId)) {
             throw new ErrorException('invalid value of serverId');
         }
-        [$this->host, $this->port] = IniParser::getServer($serverId);
+        $this->server = IniParser::getServer($serverId);
         $this->serverId = $serverId;
         $this->ppidFile = IniParser::getPpidFile($serverId);
         $this->logger = Helper::getLogger('process');
-        $this->db = new Db('db1');
+        $this->db = new Db('db1', $this->server->server);
     }
 
     public function run()
@@ -94,8 +89,7 @@ class Process
             ));
         }); */
 
-        $stream = new Stream($this->host, $this->port);
-        $this->stream = $stream;
+        $stream = new Stream($this->server->host, $this->server->port);
         // 将主进程ID写入文件
         file_put_contents($this->ppidFile, getmypid());
 
@@ -196,7 +190,7 @@ class Process
         /** @var Job $c */
         foreach ($this->taskers as $c) {
             // 单任务是否可多进程同时跑？
-            if (!$this->allowMulti($c)) {
+            if (!$this->isAllowMulti($c)) {
                 continue;
             }
 
@@ -229,7 +223,7 @@ class Process
      * @param Job $c
      * @return bool
      */
-    protected function allowMulti(Job $c)
+    protected function isAllowMulti(Job $c)
     {
         // 说明设置的定时任务内没跑完
         if (

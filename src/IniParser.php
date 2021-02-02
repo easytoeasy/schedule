@@ -113,10 +113,10 @@ class IniParser
         if (!isset($config['server_' . $serverId])) {
             throw new ErrorException(sprintf("undifined module server_%s", $serverId));
         }
-        $module = $config['server_' . $serverId];
+        $server = $config['server_' . $serverId];
         self::$serverId = $serverId;
         unset($config);
-        return [$module['host'], $module['port']];
+        return new Server($server);
     }
 
     /**

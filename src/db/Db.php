@@ -7,25 +7,37 @@ class Db
 
     protected $dbConn;
     protected $servTags;
+    protected $server;
 
-    public function __construct($name)
+    /**
+     * @param string $name DB name
+     * @param int $server 服务器编号
+     */
+    public function __construct($name, $server)
     {
         $this->dbConn = new DBConn($name);
+        $this->server = $server;
     }
 
-    public function getVars($serverId)
+    /**
+     * jobs内command的占位符，由此配置
+     *
+     * @param int $server 服务器的编号
+     * @return array
+     */
+    public function getVars()
     {
         $dbConn = $this->dbConn;
         $dbConn->createQueryBuilder()
             ->select('name', 'value')
             ->from('scheduler_vars')
-            // ->where('server_id = :server_id')          //两种写法都有问题，难道我下了一个假的包？
-            // ->setParameter(':server_id', $serverId)
+            // ->where('server_id = :server')          //两种写法都有问题，难道我下了一个假的包？
+            // ->setParameter(':server_id', $server)
             // ->where('server_id = ?')
-            // ->setParameter(0, $serverId)
+            // ->setParameter(0, $server)
             ->where('server_id = ?');
 
-        $tags = $dbConn->executeCacheQuery(0, [$serverId]);
+        $tags = $dbConn->executeCacheQuery(0, [$this->server]);
         $rs = [];
         foreach ($tags as $v) {
             $key = '{' . $v['name'] . '}';
@@ -55,7 +67,7 @@ class Db
     /**
      * 获取该服务下的所有任务
      *
-     * @param int $serverId
+     * @param int $serverId 确切的说是对jobs下命令的分类，由于是线上库，就不在改字段
      * @return array
      */
     public function getJobs($serverId)
@@ -73,7 +85,7 @@ class Db
 
         $data = $dbConn->fetchAll([$serverId]);
         $tags = $this->getTags();
-        $vars = $this->getVars($serverId = 1);
+        $vars = $this->getVars();
         $jobs = [];
         foreach ($data as $v) {
             if (!isset($this->servTags[$v['tag_id']])) {

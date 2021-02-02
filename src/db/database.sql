@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS `scheduler_jobs` (
 -- 这里的server_id和jobs的server_id已经不是一回事了。
 -- jobs的server_id是为了将不同的脚本分类执行，不至于在一个循环内执行太多
 -- vars的server_id是服务器的标志，不同的服务器上对应的目录、命令都可能不同。
+-- 正确的说，jobs的server_id字段名称应该换一个才对。
 CREATE TABLE IF NOT EXISTS `scheduler_vars` (
   `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
   `name` varchar(50) NOT NULL DEFAULT '' COMMENT '变量名',

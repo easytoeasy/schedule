@@ -90,7 +90,8 @@ class DBConn
             !empty($types) ? json_encode($types) : ''
         ));
         $stmt = $conn->executeCacheQuery($query, $params, $types, new QueryCacheProfile($cachetime, $key, $cache));
-        $data = $stmt->fetchAllAssociative();
+        // $data = $stmt->fetchAllAssociative();
+        $data = $stmt->fetchAll();
         return $data;
     }
 
@@ -112,12 +113,12 @@ class DBConn
     {
         $conn = $this->getConn();
         $sql = $this->queryBuilder->getSQL();
-        $rs = $conn->fetchAllAssociative($sql, $params, $types);
+        // 为了兼容我们服务器的版本不同，都用7.1的调用方式
+        // $rs = $conn->fetchAllAssociative($sql, $params, $types);
+        $stmt = $conn->executeQuery($sql, $params, $types);
+        $rs = $stmt->fetchAll();
         return $rs;
     }
-
-
-
 
     /**
      * Get the value of queryBuilder
