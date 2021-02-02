@@ -9,15 +9,15 @@ class Helper
 {
 
     /**
-	 * 保证每次执行时都是从这分钟的0秒开始
-	 */
-	public static function secondsToNextMin()
-	{
-		$nextMin = strtotime(date('Y-m-d H:i') . ' +1 minute');
-		return $nextMin - time();
-	}
+     * 保证每次执行时都是从这分钟的0秒开始
+     */
+    public static function secondsToNextMin()
+    {
+        $nextMin = strtotime(date('Y-m-d H:i') . ' +1 minute');
+        return $nextMin - time();
+    }
 
-    public static function getLogger($name, $file='', $level = Logger::DEBUG)
+    public static function getLogger($name, $file = '', $level = Logger::DEBUG)
     {
         $handler = new FileHandler($file, $level);
         $logger = new Logger($name, [$handler]);
@@ -36,7 +36,7 @@ class Helper
         return empty($matches) ? false : ($matches[1] == $pid ? true : false);
     }
 
-       /**
+    /**
      * Configures an object with the initial property values.
      * @param object $object the object to be configured
      * @param array $properties the property initial values given in terms of name-value pairs.
@@ -51,4 +51,13 @@ class Helper
         return $object;
     }
 
+
+    public static function delTree($dir)
+    {
+        $files = array_diff(scandir($dir), array('.', '..'));
+        foreach ($files as $file) {
+            (is_dir("$dir/$file")) ? self::delTree("$dir/$file") : unlink("$dir/$file");
+        }
+        return rmdir($dir);
+    }
 }

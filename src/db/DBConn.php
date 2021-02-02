@@ -8,7 +8,6 @@ use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use Doctrine\DBAL\Query\QueryBuilder;
 use ErrorException;
-use Exception;
 use Monolog\Logger;
 use pzr\schedule\Helper;
 use pzr\schedule\IniParser;
@@ -25,6 +24,8 @@ class DBConn
     /** @var Logger */
     protected $logger;
 
+    protected $conn;
+
     public function __construct($module)
     {
         $this->logger = Helper::getLogger('DBConn');
@@ -36,6 +37,18 @@ class DBConn
      * @return Connection
      */
     public function getConn()
+    {
+        if ($this->conn)
+            return $this->conn;
+        return $this->conn = $this->connection();
+    }
+
+    /**
+     * 之前碰到过的问题
+     * 1）小心太多数据库链接数
+     * 2）丢失连接
+     */
+    protected function connection()
     {
         if (empty($this->module))
             throw new ErrorException('module is empty');
@@ -53,15 +66,17 @@ class DBConn
             throw new ErrorException(sprintf("undifined '[%s]' in db config", $this->module));
 
         $conn = self::$conns[$this->module] = DriverManager::getConnection($dbConfig[$this->module]);
-        $cache = new \Doctrine\Common\Cache\ArrayCache();
-        $config = $conn->getConfiguration();
-        $config->setResultCacheImpl($cache);
+
         return $conn;
     }
 
     public function executeCacheQuery(int $cachetime = 120, $params = [], $types = [])
     {
+
         $conn = $this->getConn();
+        $cache = new \Doctrine\Common\Cache\ArrayCache();
+        $config = $conn->getConfiguration();
+        $config->setResultCacheImpl($cache);
         $query = $this->queryBuilder->getSQL();
         $cache = new FilesystemCache(__DIR__ . '/cache');
 

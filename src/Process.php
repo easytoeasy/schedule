@@ -36,8 +36,14 @@ class Process
     protected $db;
     protected $host;
     protected $port;
-    // protected $tags = array();
     protected $servTags = array();
+    /*
+     * 主进程每分钟执行，超过的话则记录。
+     * 但是鉴于可能存在几秒中的误差是正常的，所以宽限5s
+     * 之所以默认值为-1，因为一开始进去就会+1
+     */
+    protected $outofMin = -1;
+    protected $extSeconds = 5;
 
     public function __construct($serverId)
     {
@@ -49,7 +55,6 @@ class Process
         $this->ppidFile = IniParser::getPpidFile($serverId);
         $this->logger = Helper::getLogger('process');
         $this->db = new Db('db1');
-        // $this->tags = $this->db->getTags();
     }
 
     public function run()
@@ -72,44 +77,51 @@ class Process
 
         @cli_set_process_title('Schedule: server-' . $this->serverId);
 
-        // set_error_handler(function ($errno, $errstr, $errfile, $errline) {
-        //     if (!(error_reporting(E_ALL & ~E_WARNING & ~E_NOTICE) & $errno)) {
-        //         return false;
-        //     }
-        //     $this->logger->error(sprintf(
-        //         "%s, %s, %s, %s",
-        //         $errno,
-        //         $errstr,
-        //         $errfile,
-        //         $errline
-        //     ));
-        // });
+        /**
+         * 1）无法捕获到require中的错误
+         * 2）无法捕获到DBAL中的异常，但是通过try/catch 主进程的入口函数可以捕获到
+         */
+        /* set_error_handler(function ($errno, $errstr, $errfile, $errline) {
+            if (!(error_reporting(E_ALL & ~E_WARNING & ~E_NOTICE) & $errno)) {
+                return false;
+            }
+            $this->logger->error(sprintf(
+                "%s, %s, %s, %s",
+                $errno,
+                $errstr,
+                $errfile,
+                $errline
+            ));
+        }); */
 
         $stream = new Stream($this->host, $this->port);
         $this->stream = $stream;
         // 将主进程ID写入文件
         file_put_contents($this->ppidFile, getmypid());
 
-        pcntl_async_signals(TRUE);
+
+        // pcntl_async_signals(TRUE);
 
         /**
+         * stream设置成每秒钟block，则waitpid每秒都会被执行。则不再需要信号处理
          * @see https://www.php.net/manual/zh/function.pcntl-signal.php 用户的评论
          * 1）仅仅只靠事件通知的siginfo['pid']去回收子进程，还是会出现僵尸进程。
          * 2）最好的做法还是结合所有的子进程通过childPid管理，然后循环监控子进程。
          */
-        pcntl_signal(SIGCHLD, [$this, 'sigHandler']);
+        // pcntl_signal(SIGCHLD, [$this, 'sigHandler']);
 
         $wait = 60;
         $next = 0;
-
         while (true) {
             $stamp = time();
             do {
                 if ($stamp >= $next) {
                     break;
                 }
-                $diff = $next - $stamp;
+                // 设置成1s，则每秒都会回收可能产生的僵尸进程
+                $diff = 1;
                 /**
+                 * $diff = $next - $stamp;
                  * 将原 sleep($diff) 改成stream的阻塞
                  * 子进程发出信号时，select阻塞状态会被打断
                  */
@@ -117,18 +129,28 @@ class Process
                     $this->handle($md5, $action);
                     return $this->display();
                 });
+
+                /**
+                 * 将进程回收放在这里，则可以每秒钟都触发进程的回收
+                 */
+                $this->waitpid();
                 $stamp = time();
             } while ($stamp < $next);
 
             // 保障1min内能够执行完，但是如果1min内执行不完呢？
+
             $this->syncFromDB();
             $this->initTasker();
+
             /**
              * 已经有信号处理器了，为什么还要这个呢？
              * 防止某个进程没有被信号处理函数处理成为僵尸进程，这里作为一个保障
              */
-            $this->waitpid();
-
+            // $this->waitpid();
+            // 超过限定的每分钟跑一次了
+            if ($stamp - $next > $wait + $this->extSeconds) {
+                $this->outofMin++;
+            }
             $next = $stamp + $wait;
         }
     }
@@ -178,6 +200,15 @@ class Process
                 continue;
             }
 
+            if ($c->state == State::STARTING) {
+                $this->fork($c);
+                continue;
+            }
+            if ($c->pid && $c->state == State::STOPPING) {
+                posix_kill($c->pid, SIGTERM);
+                continue;
+            }
+
             $cronExpression = CronExpression::factory($c->cron);
             if ($cronExpression->isDue()) {
                 $this->logger->debug(
@@ -200,6 +231,13 @@ class Process
      */
     protected function allowMulti(Job $c)
     {
+        // 说明设置的定时任务内没跑完
+        if (
+            $c->state == State::RUNNING
+            && CronExpression::factory($c->cron)->isDue()
+        ) {
+            $c->outofCron++;
+        }
         if ($c->refcount >= $c->max_concurrence) {
             $this->logger->debug(sprintf(
                 "pid %s is %s, max allowed is %s, refcount is %s",
@@ -217,16 +255,31 @@ class Process
     protected function handle($md5, $action)
     {
         if ($md5 && isset($this->taskers[$md5])) {
-            $c = $this->taskers[$md5];
+            $c = &$this->taskers[$md5];
         }
 
         if (!empty($action)) {
-            $info = $c ? $c->id : 'log';
+            $info = $c ? $c->id : '';
             $this->message = sprintf("%s %s at %s", $action, $info, date('Y-m-d H:i:s'));
             $this->logger->debug(sprintf("md5:%s, action:%s", $info, $action));
         }
 
         switch ($action) {
+            case 'start':
+                if (!in_array($c->state, State::runingState())) {
+                    $c->state = State::STARTING;
+                }
+                break;
+            case 'stop':
+                if ($c->state == State::RUNNING) {
+                    $rs = posix_kill($c->pid, SIGTERM);
+                    $this->message .= ' result:' . intval($rs);
+                }
+                break;
+            case 'flush':
+                $rs = Helper::delTree(__DIR__ . '/db/cache');
+                $this->message .= ' result:' . intval($rs);
+                break;
             case 'clear':
                 if (empty($c)) {
                     [$logfile] = IniParser::getCommLog();
@@ -258,10 +311,16 @@ class Process
             if ($result == $pid || $result == -1) {
                 unset($this->childPids[$pid]);
                 if (!isset($this->taskers[$md5])) continue;
+                $normal = pcntl_wexitstatus($status);
+                $code = pcntl_wexitstatus($status);
                 $c = &$this->taskers[$md5];
+                if ($code != 0) { //正常退出是0
+                    $c->state = State::BACKOFF;
+                } else {
+                    $c->state = State::STOPPED;
+                }
                 $c->refcount--;
                 $c->pid = '';
-                $c->state = State::STOPPED;
             }
         }
     }
@@ -288,11 +347,20 @@ class Process
     protected function fork(Job &$c)
     {
         $descriptorspec = [];
-        $logfile = $c->output ?: IniParser::getCommLog()[0];
-        $descriptorspec = $logfile ? [
-            1 => ['file', $logfile, 'a'], //stdout
-            2 => ['file', $logfile, 'a']  //error
-            ] : [];
+        if ($c->output) { //stdout
+            $descriptorspec[1] = ['file', $c->output, 'a'];
+        }
+        if ($c->stderr) { //stderr
+            $descriptorspec[2] = ['file', $c->stderr, 'a'];
+        }
+        /**
+         * 1）由于主进程setsid失去了控制台的联系，当如执行的命令脚本不存在是报：
+         * Could not open input file，会直接输出到启动脚本的控制台。所以
+         * 为了避免无法捕获到这种错误，应该每条记录设置output。
+         * 2）还可以执行主进程时，如：`sudo Process.php >> output.log`
+         * 3) 虽然日志等信息可以捕获了，但是记得要清理日志
+         * 4) 对于因为异常而停止运行的脚本，状态应该区分
+         */
         $process = proc_open('exec ' . $c->command, $descriptorspec, $pipes, $c->directory);
         if ($process) {
             $ret = proc_get_status($process);
@@ -377,7 +445,7 @@ if (PHP_SAPI != 'cli') {
 }
 
 // 当前进程创建的文件权限为755
-umask(022);
+umask(0);
 
 $serverId = $argv[1];
 if (empty($serverId) || !is_numeric($serverId)) {
@@ -387,7 +455,6 @@ if (empty($serverId) || !is_numeric($serverId)) {
 try {
     $cli = new Process($serverId);
     $cli->run();
-} catch(Exception $e) {
+} catch (Exception $e) {
     echo $e;
 }
-
