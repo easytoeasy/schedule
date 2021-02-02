@@ -107,7 +107,7 @@
 <script>
   function tagChange() {
     var obj = document.getElementById('tagid'); //定位id
-    var index = obj.selectedIndex; // 选中索引
+    var index = obj.value; // 选中值
     window.location.href = 'index.php?tagid=' + index;
   }
 </script>
