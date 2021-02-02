@@ -38,8 +38,12 @@ class DBConn
      */
     public function getConn()
     {
-        if ($this->conn)
-            return $this->conn;
+        /**
+         * 如何解决 2006 MySQL server has gone away 问题？
+         * 那就注释掉下面的方法，每次都创建一个新的。
+         */
+        // if ($this->conn)
+        //     return $this->conn;
         return $this->conn = $this->connection();
     }
 
@@ -72,7 +76,6 @@ class DBConn
 
     public function executeCacheQuery(int $cachetime = 120, $params = [], $types = [])
     {
-
         $conn = $this->getConn();
         $cache = new \Doctrine\Common\Cache\ArrayCache();
         $config = $conn->getConfiguration();
