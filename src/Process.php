@@ -382,7 +382,7 @@ class Process
         $scriptName = in_array($scriptName, ['', '/']) ? '/index.php' : $scriptName;
 
         if ($scriptName == '/index.html') {
-            $location = sprintf("%s://%s:%s", 'http', $this->host, $this->port);
+            $location = sprintf("%s://%s:%s", 'http', $this->server->host, $this->server->port);
             return Http::status_301($location);
         }
 
