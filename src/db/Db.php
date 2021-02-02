@@ -83,7 +83,8 @@ class Db
             ->where('server_id = ?')
             ->andWhere('status = 1');
 
-        $data = $dbConn->fetchAll([$serverId]);
+        // $data = $dbConn->fetchAll([$serverId]);
+        $data = $dbConn->executeCacheQuery(120, [$serverId]);
         $tags = $this->getTags();
         $vars = $this->getVars();
         $jobs = [];
