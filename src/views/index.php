@@ -17,12 +17,13 @@
     </div>
 
     <div>
-      <div class="status_msg">serverId:<?= $this->serverId ?>, outofMin: <?=$this->outofMin?></div>
-      <div class="status_msg"><?= $this->message ?></div>
+      <div class="status_msg">
+        <?= $this->message ?>
+        <span style="float:right">serverId:<?= $this->serverId ?>, ppid:<?= getmypid() ?> , outofMin: <?= $this->outofMin ?></span>
+      </div>
 
       <ul class="clr" id="buttons">
-        <li class="action-button"><a href="tail.php" target="_blank">logfile</a></li>
-        <li class="action-button"><a href="index.html?action=clear">clear</a></li>
+        <li class="action-button"><a href="tail.php" target="_blank">tail stderr</a></li>
         <li class="action-button"><a href="index.html?action=flush">flush cache</a></li>
         <li class="action-button">
           <select id='tagid' onchange="tagChange()">
@@ -38,6 +39,7 @@
             }
             ?>
           </select>
+          <li class="action-button"><a href="index.html?action=clear">clear log</a></li>
         </li>
 
       </ul>
@@ -55,24 +57,24 @@
         <tbody>
           <?php
 
-                                use pzr\schedule\db\Job;
-                                use pzr\schedule\State;
+          use pzr\schedule\db\Job;
+          use pzr\schedule\State;
 
           $id = isset($_GET['id']) ? $_GET['id'] : 0;
-          $rows = 0;
           if ($this->taskers)
             /** @var Job $c */
             foreach ($this->taskers as $c) {
-              $rows++;
               if ($searchTagid && $c->tag_id != $searchTagid) {
                 continue;
               }
               if ($id && $c->id != $id) continue;
           ?>
-            <tr class="<?= $rows % 2 == 1 ? '' : 'shade' ?>">
+            <tr class="shade">
               <td class="status"><span class="status<?= State::css($c->state) ?>"><?= State::desc($c->state) ?></span></td>
-              <td> <span>pid <?= $c->pid ?>, <?= $c->uptime ?>, refcount: <?= $c->refcount ?></span> </td>
-              <td><a>id:<?= $c->id ?> <?= $c->name ?> outofCron:<?=$c->outofCron?></a></td>
+              <td>
+                <span>pid <?= $c->pid ?>, <?= $c->uptime ?>, 引用: <?= $c->refcount ?></span>
+              </td>
+              <td><?= $c->id ?>，超时:<?= $c->outofCron ?>，<a><?= $c->name ?></a> </td>
               <td class="action">
                 <ul>
                   <?php if (in_array($c->state, State::runingState())) { ?>

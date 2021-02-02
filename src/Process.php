@@ -265,7 +265,7 @@ class Process
                 }
                 break;
             case 'stop':
-                if ($c->state == State::RUNNING) {
+                if ($c->state == State::RUNNING && $c->pid) {
                     $rs = posix_kill($c->pid, SIGTERM);
                     $this->message .= ' result:' . intval($rs);
                 }
