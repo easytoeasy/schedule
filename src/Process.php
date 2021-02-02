@@ -349,10 +349,12 @@ class Process
         $descriptorspec = [];
         if ($c->output) { //stdout
             $descriptorspec[1] = ['file', $c->output, 'a'];
+            $descriptorspec[2] = ['file', $c->output, 'a'];
         }
-        if ($c->stderr) { //stderr
-            $descriptorspec[2] = ['file', $c->stderr, 'a'];
-        }
+        // 等待数据库提案通过
+        // if ($c->stderr) { //stderr
+        //     $descriptorspec[2] = ['file', $c->stderr, 'a'];
+        // }
         /**
          * 1）由于主进程setsid失去了控制台的联系，当如执行的命令脚本不存在是报：
          * Could not open input file，会直接输出到启动脚本的控制台。所以
