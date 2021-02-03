@@ -465,7 +465,7 @@ if (PHP_SAPI != 'cli') {
 
 // 当前进程创建的文件权限为755
 umask(0);
-ini_set('error_reporting', E_ALL & E_NOTICE & ~E_WARNING);
+ini_set('error_reporting', E_ALL & ~E_NOTICE & ~E_WARNING);
 
 $serverId = $argv[1];
 if (empty($serverId) || !is_numeric($serverId)) {
