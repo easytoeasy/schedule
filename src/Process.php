@@ -40,6 +40,9 @@ class Process
     protected $outofMin = -1;
     protected $extSeconds = 5;
 
+    protected $newAddIds = array();
+    protected $beDelIds = array();
+
     public function __construct($serverId)
     {
         if (empty($serverId)) {
@@ -168,13 +171,30 @@ class Process
 
         if (empty($newAdds) && empty($beDels)) return;
 
+        /**
+         * 正在运行的任务不能清除
+         * 主进程每分钟跑一次，此时待删除的子进程可能需要运行数分钟。但是每分钟都会
+         * 执行到这里。直到待删除的子进程全部结束。
+         */
         foreach ($beDels as $key => $value) {
+            $c = &$this->taskers[$key];
+            if ($c->refcount > 0) {
+                $this->beDelIds[$c->id] = $c->id;
+                $c->state = State::DELETING;
+                continue;
+            }
             $this->logger->debug('taskers del row:' . $value->id);
+            unset($this->beDelIds[$c->id]);
             unset($this->taskers[$key]);
         }
 
+        /** 
+         * 子任务的某些字段值被更改后，会重新生成md5值。主进程会重新加载这个命令到内存并且执行。
+         * 为了防止同一个id的命令被多次执行，在即将执行命令之前先按id排重。
+         */
         foreach ($newAdds as $key => $value) {
             $this->logger->debug('taskers add row:' . $value->id);
+            $value->state = State::WAITING;
             $this->taskers[$key] = $value;
         }
 
@@ -190,7 +210,7 @@ class Process
         /** @var Job $c */
         foreach ($this->taskers as $c) {
             // 单任务是否可多进程同时跑？
-            if (!$this->isAllowMulti($c)) {
+            if (!$this->isAllowedRun($c)) {
                 continue;
             }
 
@@ -223,8 +243,12 @@ class Process
      * @param Job $c
      * @return bool
      */
-    protected function isAllowMulti(Job $c)
+    protected function isAllowedRun(Job $c)
     {
+        // 该id对应的原子进程等待被删除，此时不能启动此id下的命令
+        if (in_array($c->id, $this->beDelIds)) {
+            return false;
+        }
         // 说明设置的定时任务内没跑完
         if (
             $c->state == State::RUNNING
@@ -311,7 +335,7 @@ class Process
                 if ($code != 0) { //正常退出是0
                     $c->state = State::BACKOFF;
                 } else {
-                    $c->state = State::STOPPED;
+                    $c->state = $c->state == State::DELETING ?: State::STOPPED;
                 }
                 $c->refcount--;
                 $c->pid = '';
