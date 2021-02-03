@@ -30,7 +30,7 @@ class State
 
     public static function desc($state)
     {
-        return self::$desc[$state];
+        return isset(self::$desc[$state]) ? self::$desc[$state] : $state;
     }
 
     public static function css($state)

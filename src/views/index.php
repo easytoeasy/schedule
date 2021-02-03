@@ -97,7 +97,7 @@
             </tr>
             <tr>
               <td colspan="4">
-                <font style="color: gray;margin-left:77px;"><?= $c->command ?></font>
+                <font style="color: gray;margin-left:77px;"><?=$c->cron?> <?= $c->command ?></font>
               </td>
             </tr>
           <?php  } ?>
