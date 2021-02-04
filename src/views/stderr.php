@@ -22,12 +22,12 @@
 		<div id="content">
 			<ul>
 				<li>
-					<a href="stderr.php?md5=<?= $_GET['md5'] ?>&type=2" name="Tail -f Stderr" target="self">Tail -f Stderr</a>
+					<a href="stderr.php?md5=<?= $_GET['md5'] ?>&type=2" name="Tail -f Stderr">Tail -f Stderr</a>
 					&nbsp;&nbsp;
 					<a href="stderr.html?md5=<?= $_GET['md5'] ?>&action=clear_2&type=2" name="Clear Stderr">Clear Stderr</a>
 				</li>
 				<li>
-					<a href="stderr.php?md5=<?= $_GET['md5'] ?>&type=1" name="Tail -f Stderr" target="self">Tail -f Stdout</a>
+					<a href="stderr.php?md5=<?= $_GET['md5'] ?>&type=1" name="Tail -f Stderr">Tail -f Stdout</a>
 					&nbsp;&nbsp;
 					<a href="stderr.html?md5=<?= $_GET['md5'] ?>&action=clear_1&type=1" name="Clear Stderr">Clear Stdout</a>
 				</li>
