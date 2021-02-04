@@ -75,7 +75,7 @@ class Db
         if (empty($serverId)) return false;
         $dbConn = $this->dbConn;
         $fields = [
-            'id', 'name', 'command', 'cron', 'output', 'max_concurrence', 'server_id', 'tag_id'
+            'id', 'name', 'command', 'cron', 'output', 'max_concurrence', 'server_id', 'tag_id', 'stderr'
         ];
         $dbConn->createQueryBuilder()
             ->select($fields)
@@ -95,6 +95,7 @@ class Db
             $v['command'] = str_replace(array_keys($vars), array_values($vars), $v['command']);
             $md5 = md5(json_encode($v));
             $v['md5'] = $md5;
+            
             $jobs[$md5] = new Job($v);
         }
         unset($data);

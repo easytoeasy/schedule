@@ -19,7 +19,9 @@
     <div>
       <div class="status_msg">
         <?= $this->message ?>
-        <span style="float:right">serverId:<?= $this->serverId ?>, ppid:<?= getmypid() ?> , outofMin: <?= $this->outofMin ?></span>
+        <span style="float:right"> <font style="color: gray;">
+          serverId:<?= $this->serverId ?>, ppid:<?= getmypid() ?>, createAt:<?= $this->createAt ?>, outofMin: <?= $this->outofMin ?>, beDelIds:<?= count($this->beDelIds) ?>, childPids:<?= count($this->childPids) ?>
+        </font></span>
       </div>
 
       <ul class="clr" id="buttons">
@@ -39,7 +41,7 @@
             }
             ?>
           </select>
-          <li class="action-button"><a href="index.html?action=clear">clear log</a></li>
+        <li class="action-button"><a href="index.html?action=clear">clear log</a></li>
         </li>
 
       </ul>
@@ -57,7 +59,6 @@
         <tbody>
           <?php
 
-          use pzr\schedule\db\Job;
           use pzr\schedule\State;
 
           $id = isset($_GET['id']) ? $_GET['id'] : 0;
@@ -72,9 +73,9 @@
             <tr class="shade">
               <td class="status"><span class="status<?= State::css($c->state) ?>"><?= State::desc($c->state) ?></span></td>
               <td>
-                <span>pid <?= $c->pid ?>, <?= $c->uptime ?>, 引用: <?= $c->refcount ?></span>
+                <span>pid <?= $c->pid ?>, <?= $c->uptime ?>, refcount: <?= $c->refcount ?></span>
               </td>
-              <td><?= $c->id ?>，超时:<?= $c->outofCron ?>，<a><?= $c->name ?></a> </td>
+              <td><?= $c->id ?>, overtime:<?= $c->outofCron ?>, <a href="stderr.php?md5=<?= $c->md5 ?>&type=1" target="_blank"><?= $c->name ?></a> </td>
               <td class="action">
                 <ul>
                   <?php if (in_array($c->state, State::runingState())) { ?>
@@ -87,17 +88,14 @@
                     </li>
                   <?php } ?>
                   <li>
-                    <a href="stderr.php?md5=<?= $c->md5 ?>" name="Tail -f Stderr" target="_blank">Tail -f Stderr</a>
-                  </li>
-                  <li>
-                    <a href="index.html?md5=<?= $c->md5 ?>&action=clear" name="Clear Stderr">Clear Stderr</a>
+                    <a href="stderr.php?md5=<?= $c->md5 ?>&type=2" name="Tail -f Stderr" target="_blank">Tail -f Stderr</a>
                   </li>
                 </ul>
               </td>
             </tr>
             <tr>
               <td colspan="4">
-                <font style="color: gray;margin-left:77px;"><?=$c->cron?> <?= $c->command ?></font>
+                <font style="color: gray;margin-left:77px;"><?= $c->cron ?> <?= $c->command ?></font>
               </td>
             </tr>
           <?php  } ?>

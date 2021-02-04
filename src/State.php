@@ -38,6 +38,7 @@ class State
         if (in_array($state, [
             self::FATAL,
             self::UNKNOWN,
+            self::EXITED,
         ])) {
             return 'error';
         } elseif (in_array($state, [
@@ -57,6 +58,7 @@ class State
             self::EXITED,
             self::FATAL,
             self::UNKNOWN,
+            self::BACKOFF,
         ];
     }
 
@@ -65,7 +67,6 @@ class State
         return [
             self::STARTING,
             self::RUNNING,
-            self::BACKOFF,
             self::DELETING,
         ];
     }

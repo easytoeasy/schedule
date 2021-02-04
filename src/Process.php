@@ -39,9 +39,11 @@ class Process
      */
     protected $outofMin = -1;
     protected $extSeconds = 5;
-
-    protected $newAddIds = array();
+    /**
+     * 由于DB记录改变内存中即将被删除的命令
+     */
     protected $beDelIds = array();
+    protected $createAt;
 
     public function __construct($serverId)
     {
@@ -53,6 +55,7 @@ class Process
         $this->ppidFile = IniParser::getPpidFile($serverId);
         $this->logger = Helper::getLogger('process');
         $this->db = new Db('db1', $this->server->server);
+        $this->createAt = date('Y-m-d H:i:s');
     }
 
     public function run()
@@ -299,18 +302,27 @@ class Process
                 $this->message .= ' result:' . intval($rs);
                 break;
             case 'clear':
-                if (empty($c)) {
-                    [$logfile] = IniParser::getCommLog();
-                } else {
-                    $logfile = $c->output;
-                }
-                if ($logfile) {
-                    file_put_contents($logfile, '');
-                }
+                [$logfile] = IniParser::getCommLog();
+                $this->clearLog($logfile);
+                break;
+            case 'clear_1':
+                $this->clearLog($c->output);
+                break;
+            case 'clear_2':
+                $this->clearLog($c->stderr);
                 break;
             default:
                 break;
         }
+    }
+
+    protected function clearLog($logfile)
+    {
+        if (empty($logfile) || !is_file($logfile)) {
+            return;
+        }
+        $rs = file_put_contents($logfile, '');
+        $this->message .= ' result:' . $rs;
     }
 
     /**
@@ -329,11 +341,38 @@ class Process
             if ($result == $pid || $result == -1) {
                 unset($this->childPids[$pid]);
                 if (!isset($this->taskers[$md5])) continue;
-                $normal = pcntl_wexitstatus($status);
+                // $normal = pcntl_wexitstatus($status);
                 $code = pcntl_wexitstatus($status);
                 $c = &$this->taskers[$md5];
+                /**
+                 * @see https://www.jb51.net/article/73377.htm
+                 * 0 正常退出
+                 * 1 一般性未知错误
+                 * 2 不适合的shell命令
+                 * 126 调用的命令无法执行
+                 * 127 命令没找到
+                 * 128 非法参数导致退出
+                 * 128+n Fatal error signal ”n”：如`kill -9` 返回137
+                 * 130 脚本被`Ctrl C`终止
+                 * 255 脚本发生了异常退出了。那么为什么是255呢？因为状态码的范围是0-255，超过了范围。
+                 */
+                switch($code) {
+                    case 1:
+                        $state = State::EXITED;
+                        break;
+                    case 126:
+                    case 127:
+                        $state = State::FATAL;
+                        break;
+                    case 255:
+                        $state = State::UNKNOWN;
+                        break;
+                    default:
+                        break;
+                }
                 if ($code != 0) { //正常退出是0
-                    $c->state = State::BACKOFF;
+                    $this->logger->error(sprintf("the id %s,pid %s exited unexcepted about code %s", $c->id, $pid, $code));
+                    $c->state = $state;
                 } else {
                     $c->state = $c->state == State::DELETING ?: State::STOPPED;
                 }
@@ -403,9 +442,20 @@ class Process
     {
         $scriptName = isset($_SERVER['SCRIPT_NAME']) ? $_SERVER['SCRIPT_NAME'] : '';
         $scriptName = in_array($scriptName, ['', '/']) ? '/index.php' : $scriptName;
-
         if ($scriptName == '/index.html') {
             $location = sprintf("%s://%s:%s", 'http', $this->server->host, $this->server->port);
+            return Http::status_301($location);
+        }
+
+        if ($scriptName == '/stderr.html') {
+            $location = sprintf(
+                "%s://%s:%s/stderr.php?md5=%s&type=%d",
+                'http',
+                $this->server->host,
+                $this->server->port,
+                $_GET['md5'],
+                $_GET['type']
+            );
             return Http::status_301($location);
         }
 

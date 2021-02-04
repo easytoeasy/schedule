@@ -8,27 +8,56 @@
 
 <body>
 
-	<div id="content">
+	<?php
 
-		<?php
-		$program = isset($_GET['md5']) ? $_GET['md5'] : '';
-		if (!isset($this->taskers[$program])) {
-			echo 'program undefined';
-			return;
-		}
-		$c = $this->taskers[$program];
-		$logfile = $c->output;
-		if (empty($logfile) || !is_file($logfile)) {
-			echo 'has no such file or directory: ' . $logfile;
-			return;
-		}
-		$size = isset($_GET['size']) && $_GET['size'] > 0 ? intval($_GET['size']) : 100;
-		echo '<pre>';
-		echo `tail -{$size}  $logfile`;
-		echo '</pre>';
-		?>
+	use phpDocumentor\Reflection\Location;
 
-	</div>
+	$md5 = isset($_GET['md5']) ? $_GET['md5'] : '';
+	if (!isset($this->taskers[$md5])) {
+		echo 'undefined Process';
+		return;
+	} else {
+	?>
+
+		<div id="content">
+			<ul>
+				<li>
+					<a href="stderr.php?md5=<?= $_GET['md5'] ?>&type=2" name="Tail -f Stderr" target="self">Tail -f Stderr</a>
+					&nbsp;&nbsp;
+					<a href="stderr.html?md5=<?= $_GET['md5'] ?>&action=clear_2&type=2" name="Clear Stderr">Clear Stderr</a>
+				</li>
+				<li>
+					<a href="stderr.php?md5=<?= $_GET['md5'] ?>&type=1" name="Tail -f Stderr" target="self">Tail -f Stdout</a>
+					&nbsp;&nbsp;
+					<a href="stderr.html?md5=<?= $_GET['md5'] ?>&action=clear_1&type=1" name="Clear Stderr">Clear Stdout</a>
+				</li>
+			</ul>
+			<?php
+			// 1stdout，2stderr
+			$type = isset($_GET['type']) ? $_GET['type'] : 1;
+			$c = $this->taskers[$md5];
+			$typeCn = $type == 1 ? 'Stdout' : 'Stderr';
+			$logfile = $type == 1 ? $c->output : $c->stderr;
+			if (empty($logfile) || !is_file($logfile)) {
+				echo 'has no such file or directory: ' . $logfile;
+				return;
+			}
+			echo $typeCn . '	:' . $logfile . PHP_EOL;
+			if (isset($_GET['clear']) && $_GET['clear'] == 1) {
+				file_put_contents($logfile, '');
+				$href = 'stderr.php?md5=' . $md5 . '&type=2';
+				header('Location:' . $href);
+				return;
+			}
+
+			$size = isset($_GET['size']) && $_GET['size'] > 0 ? intval($_GET['size']) : 100;
+			echo '<pre>';
+			echo `tail -{$size}  $logfile`;
+			echo '</pre>';
+			?>
+
+		</div>
+	<?php } ?>
 
 </body>
 
