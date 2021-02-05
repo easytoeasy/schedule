@@ -19,9 +19,11 @@
     <div>
       <div class="status_msg">
         <?= $this->message ?>
-        <span style="float:right"> <font style="color: gray;">
-          serverId:<?= $this->serverId ?>, ppid:<?= getmypid() ?>, createAt:<?= $this->createAt ?>, outofMin: <?= $this->outofMin ?>, beDelIds:<?= count($this->beDelIds) ?>, childPids:<?= count($this->childPids) ?>
-        </font></span>
+        <span style="float:right">
+          <font style="color: gray;">
+            serverId:<?= $this->serverId ?>, ppid:<?= getmypid() ?>, createAt:<?= $this->createAt ?>, outofMin: <?= $this->outofMin ?>, beDelIds:<?= count($this->beDelIds) ?>, childPids:<?= count($this->childPids) ?>
+          </font>
+        </span>
       </div>
 
       <ul class="clr" id="buttons">
@@ -73,7 +75,7 @@
             <tr class="shade">
               <td class="status"><span class="status<?= State::css($c->state) ?>"><?= State::desc($c->state) ?></span></td>
               <td>
-                <span>pid <?= $c->pid ?>, <?= $c->uptime ?>, refcount: <?= $c->refcount ?></span>
+                <span>pid <?= $c->pid ?>, refcount: <?= $c->refcount ?></span>
               </td>
               <td><?= $c->id ?>, overtime:<?= $c->outofCron ?>, <a href="stderr.php?md5=<?= $c->md5 ?>&type=1" target="_blank"><?= $c->name ?></a> </td>
               <td class="action">
@@ -95,7 +97,10 @@
             </tr>
             <tr>
               <td colspan="4">
-                <font style="color: gray;margin-left:77px;"><?= $c->cron ?> <?= $c->command ?></font>
+                <font style="color: gray;margin-left:77px;">
+                  <?= $c->uptime . '~' . $c->endtime ?>&nbsp;&nbsp;|&nbsp;&nbsp;
+                  <?= $c->cron ?> <?= $c->command ?>
+                </font>
               </td>
             </tr>
           <?php  } ?>

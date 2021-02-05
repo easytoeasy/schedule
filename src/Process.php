@@ -76,6 +76,21 @@ class Process
             exit;
         }
 
+        /* 引用：理论上一次fork就可以了
+         * 但是，二次fork，这里的历史渊源是这样的：在基于system V的系统中，
+         * 通过再次fork，父进程退出，子进程继续，保证形成的daemon进程绝对不
+         * 会成为会话首进程，不会拥有控制终端。
+         * 现象：一旦成为守护进程之后，就会与控制终端失去联系。在关闭控制终端之前，
+         * 子进程的输出都会写到终端。但是如果关闭后，则子进程无法输出到终端。那么
+         * 观察到的影响就是子进程退出。所以需要在启动子进程时指定输出*/
+        // $pid = pcntl_fork();
+        // if ($pid < 0) {
+        //     throw new ErrorException('fork error');
+        //     exit;
+        // } elseif ($pid > 0) {
+        //     exit;
+        // }
+
         @cli_set_process_title('Schedule: server-' . $this->serverId);
 
         /**
@@ -331,9 +346,11 @@ class Process
     protected function waitpid()
     {
         /**
-         * 这一行是否还有必要？
+         * 当启用sigHandler时，`pcntl_signal_dispatch`这一行是否还有必要？
          * 有必要，因为之前设置的pcntl_async_signals似乎只是针对handler的处理，但是
-         * 偶尔会出现信号通知丢失的问题，导致子进程退出后无法立即回收。这时候就需要主动回收
+         * 偶尔会出现信号通知丢失的问题，导致子进程退出后无法立即回收。这时候就需要主动回收.
+         * 
+         * 后来去掉了sigHandler的回收方式，取而代之的是每秒钟都主动回收下已死的子进程。
          */
         pcntl_signal_dispatch();
         foreach ($this->childPids as $pid => $md5) {
@@ -356,7 +373,7 @@ class Process
                  * 130 脚本被`Ctrl C`终止
                  * 255 脚本发生了异常退出了。那么为什么是255呢？因为状态码的范围是0-255，超过了范围。
                  */
-                switch($code) {
+                switch ($code) {
                     case 1:
                         $state = State::EXITED;
                         break;
@@ -378,6 +395,7 @@ class Process
                 }
                 $c->refcount--;
                 $c->pid = '';
+                $c->endtime = date('m/d H:i');
             }
         }
     }
@@ -404,21 +422,18 @@ class Process
     protected function fork(Job &$c)
     {
         $descriptorspec = [];
+        /* 子进程有输出，但是和终端失去联系。如果指定了output那么可以继续执行。
+         * 但是如果没有output则必须指定`pipe`。因为没有的话观察发现子进程会退出 */
         if ($c->output) { //stdout
             $descriptorspec[1] = ['file', $c->output, 'a'];
+        } else {
+            $descriptorspec[1] = ['pipe', 'w'];
         }
-        // 等待数据库提案通过
+        /* 没有stderr可以，但是没有stdout就不行。*/
         if ($c->stderr) { //stderr
             $descriptorspec[2] = ['file', $c->stderr, 'a'];
         }
-        /**
-         * 1）由于主进程setsid失去了控制台的联系，当如执行的命令脚本不存在是报：
-         * Could not open input file，会直接输出到启动脚本的控制台。所以
-         * 为了避免无法捕获到这种错误，应该每条记录设置output。
-         * 2）还可以执行主进程时，如：`sudo Process.php >> output.log`
-         * 3) 虽然日志等信息可以捕获了，但是记得要清理日志
-         * 4) 对于因为异常而停止运行的脚本，状态应该区分
-         */
+
         $process = proc_open('exec ' . $c->command, $descriptorspec, $pipes, $c->directory);
         if ($process) {
             $ret = proc_get_status($process);
@@ -426,7 +441,7 @@ class Process
                 $c->refcount++;
                 $c->state = State::RUNNING;
                 $c->pid = $ret['pid'];
-                $c->uptime = date('m-d H:i');
+                $c->uptime = date('m/d H:i');
                 $this->childPids[$c->pid] = $c->md5;
             } else {
                 $c->state = State::BACKOFF;
@@ -502,6 +517,11 @@ class Process
             $c->pid = '';
             $c->state = State::STOPPED;
         }
+    }
+
+    public function __destruct()
+    {
+        
     }
 }
 

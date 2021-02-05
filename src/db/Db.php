@@ -19,6 +19,7 @@ class Db
         $this->server = $server;
     }
 
+
     /**
      * jobs内command的占位符，由此配置
      *
