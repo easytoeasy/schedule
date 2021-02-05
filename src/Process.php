@@ -8,9 +8,7 @@ use Exception;
 use Monolog\Logger;
 use pzr\schedule\db\Db;
 use pzr\schedule\db\Job;
-
-
-
+use Throwable;
 
 class Process
 {
@@ -484,9 +482,8 @@ class Process
             require $sourcePath;
             $response = ob_get_contents();
             ob_clean();
-        } catch (Exception $e) {
-            $this->logger->error($e);
-            $response = $e->getMessage();
+        } catch (Throwable $e) {
+            $response = $e->__toString();
         }
 
         return Http::status_200($response);
