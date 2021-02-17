@@ -187,7 +187,7 @@ class Process
 
     protected function syncFromDB()
     {
-        $this->logger->debug('before DB:' . memory_get_usage());
+        // $this->logger->debug('before DB:' . memory_get_usage());
         $db = new Db('db1', $this->server->server);
         $taskers = $db->getJobs($this->serverId);
         $this->servTags = $db->getServTags();
@@ -227,7 +227,7 @@ class Process
         }
 
         unset($taskers, $newAdds, $beDels, $db);
-        $this->logger->debug('after DB:' . memory_get_usage());
+        // $this->logger->debug('after DB:' . memory_get_usage());
     }
 
     /**
