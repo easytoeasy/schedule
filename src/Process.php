@@ -496,7 +496,7 @@ class Process
             return $this->http->status_404();
         }
 
-        $this->logger->info('before source:' . memory_get_usage());
+        // $this->logger->debug('before source:' . memory_get_usage());
         try {
             ob_start(null, null, PHP_OUTPUT_HANDLER_CLEANABLE | PHP_OUTPUT_HANDLER_REMOVABLE);
             require $sourcePath;
@@ -507,7 +507,7 @@ class Process
             $response = $e->__toString();
         }
         
-        $this->logger->info('after source:' . memory_get_usage());
+        // $this->logger->debug('after source:' . memory_get_usage());
         unset($sourcePath);
         return $this->http->status_200($response);
     }
