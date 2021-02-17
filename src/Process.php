@@ -142,7 +142,7 @@ class Process
                     break;
                 }
                 // 设置成1s，则每秒都会回收可能产生的僵尸进程
-                $this->logger->debug('before stream:' . memory_get_usage());
+                // $this->logger->debug('before stream:' . memory_get_usage());
                 /**
                  * $diff = $next - $stamp;
                  * 将原 sleep($diff) 改成stream的阻塞
@@ -153,13 +153,13 @@ class Process
                     return $this->display();
                 });
 
-                $this->logger->debug('after stream:' . memory_get_usage());
+                // $this->logger->debug('after stream:' . memory_get_usage());
 
                 /**
                  * 将进程回收放在这里，则可以每秒钟都触发进程的回收
                  */
                 $this->waitpid();
-                $this->logger->debug('after waitpid:' . memory_get_usage());
+                // $this->logger->debug('after waitpid:' . memory_get_usage());
                 $stamp = time();
             } while ($stamp < $next);
 
@@ -181,6 +181,7 @@ class Process
             $next = $stamp + $wait;
             gc_collect_cycles();
             gc_mem_caches();
+            $this->logger->debug('memory usage:' . memory_get_usage());
         }
     }
 
@@ -354,9 +355,7 @@ class Process
          * 
          * 后来去掉了sigHandler的回收方式，取而代之的是每秒钟都主动回收下已死的子进程。
          */
-        $this->logger->debug('before dispatch:' . memory_get_usage());
         pcntl_signal_dispatch();
-        $this->logger->debug('after dispatch:' . memory_get_usage());
         foreach ($this->childPids as $pid => $md5) {
             $result = pcntl_waitpid($pid, $status, WNOHANG);
             if ($result == $pid || $result == -1) {
@@ -404,7 +403,6 @@ class Process
             }
             unset($result, $pid, $md5, $status);
         }
-        $this->logger->debug('end dispatch:' . memory_get_usage());
     }
 
     /**
