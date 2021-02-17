@@ -22,38 +22,47 @@ class Process
     protected $message = 'Init Process OK';
     /** @var string 保存父进程的pid */
     protected $ppidFile;
-
     /** 服务ID */
     protected $serverId;
-    /** @var Db 数据表 */
-    protected $db;
+    /** 所有子进程的标签集合 */
     protected $servTags = array();
     /** @var Server $server */
     protected $server;
     /*
      * 主进程每分钟执行，超过的话则记录。
-     * 但是鉴于可能存在几秒中的误差是正常的，所以宽限5s
+     * 但是鉴于可能存在几秒的误差是正常的，所以宽限5s
      * 之所以默认值为-1，因为一开始进去就会+1
      */
     protected $outofMin = -1;
     protected $extSeconds = 5;
-    /**
-     * 由于DB记录改变内存中即将被删除的命令
-     */
+    /** 由于DB记录改变，内存中即将被删除的命令 */
     protected $beDelIds = array();
+    /** 记录主进程启动的时间 */
     protected $createAt;
+    /** 解决没有配置output输出文件却又有输出的子进程 */
+    protected $output;
+    /** 该Process的日志文件 */
+    protected $logfile;
+    /** 日志级别，支持web改变，便于在线测试 */
+    protected $level;
+    protected $http;
 
     public function __construct($serverId)
     {
         if (empty($serverId)) {
             throw new ErrorException('invalid value of serverId');
         }
-        $this->server = IniParser::getServer($serverId);
         $this->serverId = $serverId;
-        $this->ppidFile = IniParser::getPpidFile($serverId);
-        $this->logger = Helper::getLogger('process');
-        $this->db = new Db('db1', $this->server->server);
+        $parser = new Parser($serverId);
+        $this->server = $parser->getServer();
+        $this->ppidFile = $parser->getPpidFile();
+        $this->logger = $parser->getLogger();
         $this->createAt = date('Y-m-d H:i:s');
+        $this->logfile = $parser->getLogfile();
+        $this->level = $parser->getLevel();
+        $this->output = $parser->getOutput();
+        $this->http = new Http();
+        unset($parser);
     }
 
     public function run()
@@ -89,7 +98,8 @@ class Process
         //     exit;
         // }
 
-        @cli_set_process_title('Schedule: server-' . $this->serverId);
+        @cli_set_process_title('Schedule server_' . $this->serverId);
+
 
         /**
          * 1）无法捕获到require中的错误
@@ -112,7 +122,6 @@ class Process
         // 将主进程ID写入文件
         file_put_contents($this->ppidFile, getmypid());
 
-
         // pcntl_async_signals(TRUE);
 
         /**
@@ -125,6 +134,7 @@ class Process
 
         $wait = 60;
         $next = 0;
+        $diff = 1;
         while (true) {
             $stamp = time();
             do {
@@ -132,21 +142,24 @@ class Process
                     break;
                 }
                 // 设置成1s，则每秒都会回收可能产生的僵尸进程
-                $diff = 1;
+                $this->logger->debug('before stream:' . memory_get_usage());
                 /**
                  * $diff = $next - $stamp;
                  * 将原 sleep($diff) 改成stream的阻塞
                  * 子进程发出信号时，select阻塞状态会被打断
                  */
-                $stream->accept($diff, function ($md5, $action) {
+                 $stream->accept($diff, function ($md5, $action) {
                     $this->handle($md5, $action);
                     return $this->display();
                 });
+
+                $this->logger->debug('after stream:' . memory_get_usage());
 
                 /**
                  * 将进程回收放在这里，则可以每秒钟都触发进程的回收
                  */
                 $this->waitpid();
+                $this->logger->debug('after waitpid:' . memory_get_usage());
                 $stamp = time();
             } while ($stamp < $next);
 
@@ -154,7 +167,8 @@ class Process
 
             $this->syncFromDB();
             $this->initTasker();
-
+            if (is_file($this->output))
+                file_put_contents($this->output, '');
             /**
              * 已经有信号处理器了，为什么还要这个呢？
              * 防止某个进程没有被信号处理函数处理成为僵尸进程，这里作为一个保障
@@ -165,18 +179,19 @@ class Process
                 $this->outofMin++;
             }
             $next = $stamp + $wait;
+            gc_collect_cycles();
+            gc_mem_caches();
         }
     }
 
     protected function syncFromDB()
     {
-        $taskers = $this->db->getJobs($this->serverId);
-        $this->servTags = $this->db->getServTags();
-        $this->logger->debug(sprintf("sync %d records from db", count($taskers)));
-
+        $this->logger->debug('before DB:' . memory_get_usage());
+        $db = new Db('db1', $this->server->server);
+        $taskers = $db->getJobs($this->serverId);
+        $this->servTags = $db->getServTags();
         if (empty($this->taskers)) {
             $this->taskers = $taskers;
-            return;
         }
 
         // DB里面变更的命令
@@ -184,8 +199,6 @@ class Process
 
         // 内存中等待被删除的命令
         $beDels = array_diff_key($this->taskers, $taskers);
-
-        if (empty($newAdds) && empty($beDels)) return;
 
         /**
          * 正在运行的任务不能清除
@@ -199,7 +212,6 @@ class Process
                 $c->state = State::DELETING;
                 continue;
             }
-            $this->logger->debug('taskers del row:' . $value->id);
             unset($this->beDelIds[$c->id]);
             unset($this->taskers[$key]);
         }
@@ -209,12 +221,12 @@ class Process
          * 为了防止同一个id的命令被多次执行，在即将执行命令之前先按id排重。
          */
         foreach ($newAdds as $key => $value) {
-            $this->logger->debug('taskers add row:' . $value->id);
             $value->state = State::WAITING;
             $this->taskers[$key] = $value;
         }
 
-        unset($taskers, $newAdds, $beDels);
+        unset($taskers, $newAdds, $beDels, $db);
+        $this->logger->debug('after DB:' . memory_get_usage());
     }
 
     /**
@@ -241,13 +253,6 @@ class Process
 
             $cronExpression = CronExpression::factory($c->cron);
             if ($cronExpression->isDue()) {
-                $this->logger->debug(
-                    sprintf(
-                        "id:%s, refcount:%s",
-                        $c->id,
-                        $c->refcount
-                    )
-                );
                 $this->fork($c);
             }
         }
@@ -274,7 +279,7 @@ class Process
         }
         if ($c->refcount >= $c->max_concurrence) {
             $this->logger->debug(sprintf(
-                "pid %s is %s, max allowed is %s, refcount is %s",
+                "pid %s is %s, max is %s, refcount is %s",
                 $c->pid,
                 State::$desc[$c->state],
                 $c->max_concurrence,
@@ -315,8 +320,7 @@ class Process
                 $this->message .= ' result:' . intval($rs);
                 break;
             case 'clear':
-                [$logfile] = IniParser::getCommLog();
-                $this->clearLog($logfile);
+                $this->clearLog($this->logfile);
                 break;
             case 'clear_1':
                 $this->clearLog($c->output);
@@ -350,7 +354,9 @@ class Process
          * 
          * 后来去掉了sigHandler的回收方式，取而代之的是每秒钟都主动回收下已死的子进程。
          */
+        $this->logger->debug('before dispatch:' . memory_get_usage());
         pcntl_signal_dispatch();
+        $this->logger->debug('after dispatch:' . memory_get_usage());
         foreach ($this->childPids as $pid => $md5) {
             $result = pcntl_waitpid($pid, $status, WNOHANG);
             if ($result == $pid || $result == -1) {
@@ -394,8 +400,11 @@ class Process
                 $c->refcount--;
                 $c->pid = '';
                 $c->endtime = date('m/d H:i');
+                unset($state, $code, $key);
             }
+            unset($result, $pid, $md5, $status);
         }
+        $this->logger->debug('end dispatch:' . memory_get_usage());
     }
 
     /**
@@ -420,14 +429,18 @@ class Process
     protected function fork(Job &$c)
     {
         $descriptorspec = [];
-        /* 子进程有输出，但是和终端失去联系。如果指定了output那么可以继续执行。
-         * 但是如果没有output则必须指定`pipe`。因为没有的话观察发现子进程会退出 */
+        /** 
+         * 1）未配置stdout，但是又有输出。那么子进程无法启动
+         * 2）尝试配置输出到`/dev/null`，内存一直增加。
+         * 3）尝试输出到`pipe`，内存一直增加且不好回收。必须非阻塞模式下等待子进程写完才可以释放。
+         * 4）尝试输出到指定的一个文件，然后经常清空该文件。
+         */
         if ($c->output) { //stdout
             $descriptorspec[1] = ['file', $c->output, 'a'];
         } else {
-            $descriptorspec[1] = ['pipe', 'w'];
+            $descriptorspec[1] = ['file', $this->output, 'a'];
         }
-        /* 没有stderr可以，但是没有stdout就不行。*/
+
         if ($c->stderr) { //stderr
             $descriptorspec[2] = ['file', $c->stderr, 'a'];
         }
@@ -441,14 +454,17 @@ class Process
                 $c->pid = $ret['pid'];
                 $c->uptime = date('m/d H:i');
                 $this->childPids[$c->pid] = $c->md5;
+                $this->logger->info(sprintf("id %d pid %d start at %s", $c->id, $c->pid, $c->uptime));
             } else {
                 $c->state = State::BACKOFF;
-                proc_close($process);
+                $this->logger->error(sprintf("id %d start failed with state %s", $c->id, $c->state));
             }
+            unset($ret);
         } else {
             $c->state = State::FATAL;
+            $this->logger->error(sprintf("id %d start failed with state %s", $c->id, $c->state));
         }
-        return $c;
+        unset($process, $pipes, $descriptorspec);
     }
 
     protected function display()
@@ -456,8 +472,13 @@ class Process
         $scriptName = isset($_SERVER['SCRIPT_NAME']) ? $_SERVER['SCRIPT_NAME'] : '';
         $scriptName = in_array($scriptName, ['', '/']) ? '/index.php' : $scriptName;
         if ($scriptName == '/index.html') {
+            // if (isset($_GET['level']) && $_GET['level'] != $this->level) {
+            //     $this->level = $_GET['level'];
+            //     $this->logger = null;
+            //     $this->logger = Helper::getLogger('Schedule', $this->logfile, $_GET['level']);
+            // }
             $location = sprintf("%s://%s:%s", 'http', $this->server->host, $this->server->port);
-            return Http::status_301($location);
+            return $this->http->status_301($location);
         }
 
         if ($scriptName == '/stderr.html') {
@@ -469,24 +490,28 @@ class Process
                 $_GET['md5'],
                 $_GET['type']
             );
-            return Http::status_301($location);
+            return $this->http->status_301($location);
         }
 
-        $sourcePath = Http::$basePath . $scriptName;
+        $sourcePath = $this->http->basePath . $scriptName;
         if (!is_file($sourcePath)) {
-            return Http::status_404();
+            return $this->http->status_404();
         }
 
+        $this->logger->info('before source:' . memory_get_usage());
         try {
-            ob_start();
+            ob_start(null, null, PHP_OUTPUT_HANDLER_CLEANABLE | PHP_OUTPUT_HANDLER_REMOVABLE);
             require $sourcePath;
             $response = ob_get_contents();
-            ob_clean();
+            // ob_clean();
+            ob_end_clean();
         } catch (Throwable $e) {
             $response = $e->__toString();
         }
-
-        return Http::status_200($response);
+        
+        $this->logger->info('after source:' . memory_get_usage());
+        unset($sourcePath);
+        return $this->http->status_200($response);
     }
 
     /**
@@ -515,11 +540,6 @@ class Process
             $c->state = State::STOPPED;
         }
     }
-
-    public function __destruct()
-    {
-        
-    }
 }
 
 error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING);
@@ -539,9 +559,5 @@ if (empty($serverId) || !is_numeric($serverId)) {
     exit('invalid value of serverId');
 }
 
-try {
-    $cli = new Process($serverId);
-    $cli->run();
-} catch (Exception $e) {
-    echo $e;
-}
+$cli = new Process($serverId);
+$cli->run();

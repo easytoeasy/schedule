@@ -7,22 +7,19 @@ use Monolog\Logger;
 
 class Helper
 {
-
     /**
-     * 保证每次执行时都是从这分钟的0秒开始
+     * @param String $name
+     * @param string $file
+     * @param int $level
+     * @return Logger
      */
-    public static function secondsToNextMin()
-    {
-        $nextMin = strtotime(date('Y-m-d H:i') . ' +1 minute');
-        return $nextMin - time();
-    }
-
     public static function getLogger($name, $file = '', $level = Logger::DEBUG)
     {
         $handler = new FileHandler($file, $level);
         $logger = new Logger($name, [$handler]);
         $logger->setTimezone(new DateTimeZone('Asia/Shanghai'));
         $logger->useMicrosecondTimestamps(false);
+        unset($handler);
         return $logger;
     }
 

@@ -4,18 +4,19 @@ namespace pzr\schedule;
 
 class Http
 {
-    public static $basePath = __DIR__ . '/views';
-    public static $max_age = 120; //秒
+    public $basePath = __DIR__ . '/views';
+    public $max_age = 120; //秒
 
     /*
     *  函数:     parse_http
     *  描述:     解析http协议
     */
-    public static function parse_http($http)
+    public function parse_http($http)
     {
         // 初始化
-        $_POST = $_GET = $_COOKIE = $_REQUEST = $_SESSION = $_FILES =  array();
-        $GLOBALS['HTTP_RAW_POST_DATA'] = '';
+        // $_POST = $_GET = $_COOKIE = $_REQUEST = $_SESSION = $_FILES =  array();
+        // $GLOBALS['HTTP_RAW_POST_DATA'] = '';
+        $_GET = $_SERVER = [];
         // 需要设置的变量名
         $_SERVER = array(
             'QUERY_STRING' => '',
@@ -129,14 +130,12 @@ class Http
         } else {
             $_SERVER['QUERY_STRING'] = '';
         }
-
         // REQUEST
-        $_REQUEST = array_merge($_GET, $_POST);
-
-        return array('get' => $_GET, 'post' => $_POST, 'cookie' => $_COOKIE, 'server' => $_SERVER, 'files' => $_FILES);
+        // $_REQUEST = array_merge($_GET, $_POST);
+        // return array('get' => $_GET, 'post' => $_POST, 'cookie' => $_COOKIE, 'server' => $_SERVER, 'files' => $_FILES);
     }
 
-    public static function status_404()
+    public function status_404()
     {
         return <<<EOF
 HTTP/1.1 404 OK
@@ -145,7 +144,7 @@ content-type: text/html
 EOF;
     }
 
-    public static function status_301($location)
+    public function status_301($location)
     {
         return <<<EOF
 HTTP/1.1 301 Moved Permanently
@@ -157,7 +156,7 @@ Cache-Control: no-cache
 EOF;
     }
 
-    public static function status_304()
+    public function status_304()
     {
         return <<<EOF
 HTTP/1.1 304 Not Modified
@@ -166,13 +165,11 @@ Content-Length: 0
 EOF;
     }
 
-    public static function status_200($response)
+    public function status_200($response)
     {
         $contentType = $_SERVER['CONTENT_TYPE'];
         $length = strlen($response);
-        $header = '';
-        if ($contentType)
-            $header = 'Cache-Control: max-age=180';
+        $header = $contentType ? 'Cache-Control: max-age=180' : '';
         // $etag = md5($response);
         // ETag: $etag
         return <<<EOF
@@ -183,5 +180,6 @@ $header
 
 $response
 EOF;
+
     }
 }

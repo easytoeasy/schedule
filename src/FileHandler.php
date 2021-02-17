@@ -5,11 +5,10 @@ namespace pzr\schedule;
 use Monolog\Formatter\FormatterInterface;
 use Monolog\Formatter\LineFormatter;
 use Monolog\Handler\AbstractHandler;
-use Monolog\Handler\AbstractProcessingHandler;
 use Monolog\Logger;
 use Monolog\Utils;
 
-class FileHandler extends AbstractProcessingHandler
+class FileHandler extends AbstractHandler
 {
 
     /** @var string 日志文件路径 */
@@ -17,14 +16,24 @@ class FileHandler extends AbstractProcessingHandler
     protected $messageType = 3;
     protected $expandNewlines;
 
-    public function __construct($file = '', $level = '', bool $bubble = false, bool $expandNewlines = false)
+    public function __construct($file, $level = Logger::DEBUG, bool $bubble = false, bool $expandNewlines = false)
     {
-        list($logfile, $loglevel) = IniParser::getCommLog();
-        $level = $level?:$loglevel;
         parent::__construct($level, $bubble);
-        $file = $file ?: $logfile;
         $this->file = $file;
         $this->expandNewlines = $expandNewlines;
+    }
+
+    public function handle(array $record): bool
+    {
+        if (!$this->isHandling($record)) {
+            return false;
+        }
+
+        $record['formatted'] = $this->getDefaultFormatter()->format($record);
+
+        $this->write($record);
+
+        return false === $this->bubble;
     }
 
 

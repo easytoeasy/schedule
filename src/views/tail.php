@@ -11,19 +11,18 @@
 	<div id="content">
 
 		<?php
-use pzr\schedule\IniParser;
-
-		[$logfile] = IniParser::getCommLog();
-		if (empty($logfile) || !is_file($logfile)) {
-			echo 'has no such file or directory: ' . $logfile;
+		if (empty($this->logfile) || !is_file($this->logfile)) {
+			echo 'has no such file or directory ' . $this->logfile;
 			return;
 		}
+		echo 'logfile of ' . $this->logfile . PHP_EOL;
+		echo '<hr>';
 		$size = isset($_GET['size']) && $_GET['size'] > 0 ? intval($_GET['size']) : 20;
 		echo '<pre>';
 		/**
 		 * 每次tail都会产生一个子进程，并且会被父进程注册的信号接收到之后被回收。
 		 */
-		echo `tail -{$size} $logfile`;
+		echo `tail -{$size} $this->logfile`;
 		echo '</pre>';
 		?>
 

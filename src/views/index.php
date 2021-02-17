@@ -1,3 +1,7 @@
+<?php
+
+use Monolog\Logger;
+?>
 <!DOCTYPE html>
 <html lang="en">
 
@@ -7,8 +11,6 @@
   <link href="css/supervisor.css" rel="stylesheet" type="text/css">
   <link href="images/icon.png" rel="icon" type="image/png">
 </head>
-
-
 <body>
   <div id="wrapper">
 
@@ -21,13 +23,13 @@
         <?= $this->message ?>
         <span style="float:right">
           <font style="color: gray;">
-            serverId:<?= $this->serverId ?>, ppid:<?= getmypid() ?>, createAt:<?= $this->createAt ?>, outofMin: <?= $this->outofMin ?>, beDelIds:<?= count($this->beDelIds) ?>, childPids:<?= count($this->childPids) ?>
+            serverId:<?= $this->serverId ?>, ppid:<?= getmypid() ?>, createAt:<?= $this->createAt ?>, outofMin: <?= $this->outofMin ?>, beDelIds:<?= count($this->beDelIds) ?>, childPids:<?= count($this->childPids) ?>, level:<?=$this->level?>
           </font>
         </span>
       </div>
 
       <ul class="clr" id="buttons">
-        <li class="action-button"><a href="tail.php" target="_blank">tail stderr</a></li>
+        <li class="action-button"><a href="tail.php" target="_blank">tail log</a></li>
         <li class="action-button"><a href="index.html?action=flush">flush cache</a></li>
         <li class="action-button">
           <select id='tagid' onchange="tagChange()">
@@ -39,13 +41,12 @@
               if ($searchTagid == $id) {
                 $selected = 'selected';
               }
-              echo sprintf("<option %s value=%s>%s</option>", $selected, $id, $name);
+              printf("<option %s value=%s>%s</option>", $selected, $id, $name);
             }
             ?>
           </select>
-        <li class="action-button"><a href="index.html?action=clear">clear log</a></li>
         </li>
-
+        <li class="action-button"><a href="index.html?action=clear">clear log</a></li>
       </ul>
 
       <table cellspacing="0">
@@ -112,8 +113,14 @@
 <script>
   function tagChange() {
     var obj = document.getElementById('tagid'); //定位id
-    var index = obj.value; // 选中值
-    window.location.href = 'index.php?tagid=' + index;
+    var value = obj.value; // 选中值
+    window.location.href = 'index.php?tagid=' + value;
+  }
+
+  function loggerChange() {
+    var obj = document.getElementById('level'); //定位id
+    var value = obj.value; // 选中值
+    window.location.href = 'index.html?level=' + value;
   }
 </script>
 

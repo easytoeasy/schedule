@@ -7,6 +7,7 @@ class Db
 
     protected $dbConn;
     protected $servTags;
+    /** 服务器编号 */
     protected $server;
 
     /**
@@ -18,7 +19,6 @@ class Db
         $this->dbConn = new DBConn($name);
         $this->server = $server;
     }
-
 
     /**
      * jobs内command的占位符，由此配置
@@ -38,13 +38,13 @@ class Db
             // ->setParameter(0, $server)
             ->where('server_id = ?');
 
-        $tags = $dbConn->executeCacheQuery(0, [$this->server]);
+        $vars = $dbConn->executeCacheQuery(0, [$this->server]);
         $rs = [];
-        foreach ($tags as $v) {
+        foreach ($vars as $v) {
             $key = '{' . $v['name'] . '}';
             $rs[$key] = $v['value'];
         }
-
+        unset($vars);
         return $rs;
     }
 
@@ -61,7 +61,7 @@ class Db
         foreach ($tags as $v) {
             $rs[$v['id']] = $v['name'];
         }
-
+        unset($tags);
         return $rs;
     }
 
@@ -96,10 +96,9 @@ class Db
             $v['command'] = str_replace(array_keys($vars), array_values($vars), $v['command']);
             $md5 = md5(json_encode($v));
             $v['md5'] = $md5;
-            
             $jobs[$md5] = new Job($v);
         }
-        unset($data);
+        unset($data, $tags, $vars);
         return $jobs;
     }
 
@@ -109,5 +108,10 @@ class Db
     public function getServTags()
     {
         return $this->servTags;
+    }
+
+    public function __destruct()
+    {
+        unset($this->dbConn, $this->servTags);
     }
 }

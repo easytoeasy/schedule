@@ -5,5 +5,6 @@ composer.lock
 /src/db/cache/
 /src/tests/*.log
 /src/tests/test*.php
+/src/*.log
 
 

@@ -17,6 +17,7 @@ class Job extends BaseObject
     public $uptime;             //启动时间
     public $endtime;            //结束时间
     public $tag_id;             //标签ID，可用于快速搜索
+    public $process;
     /** 
      * id、name、command、cron、output、stderr、tag_id、server_id、max_concurrence
      * 的md5值。目的是当这些字段发生变化时，可以将原来内存的删除掉，在新增修改后的命令到内存。

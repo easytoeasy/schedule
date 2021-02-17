@@ -43,13 +43,7 @@
 				return;
 			}
 			echo $typeCn . '	:' . $logfile . PHP_EOL;
-			if (isset($_GET['clear']) && $_GET['clear'] == 1) {
-				file_put_contents($logfile, '');
-				$href = 'stderr.php?md5=' . $md5 . '&type=2';
-				header('Location:' . $href);
-				return;
-			}
-
+			echo '<hr>';
 			$size = isset($_GET['size']) && $_GET['size'] > 0 ? intval($_GET['size']) : 100;
 			echo '<pre>';
 			echo `tail -{$size}  $logfile`;
