@@ -46,17 +46,19 @@ class DBConn
         $config->setResultCacheImpl($cache);
         $query = $this->queryBuilder->getSQL();
         $cache = new FilesystemCache(__DIR__ . '/cache');
-
         $key = md5(sprintf(
             "%s%s%s",
             $query,
             !empty($params) ? json_encode($params) : '',
             !empty($types) ? json_encode($types) : ''
         ));
-        $stmt = $conn->executeCacheQuery($query, $params, $types, new QueryCacheProfile($cachetime, $key, $cache));
-        // $data = $stmt->fetchAllAssociative();
+        $qcp = new QueryCacheProfile($cachetime, $key, $cache);
+        $stmt = $conn->executeCacheQuery($query, $params, $types, $qcp);
         $data = $stmt->fetchAll();
-        $stmt->free();
+        /* 7.1版本不支持以下写法，7.3支持 */
+        // $data = $stmt->fetchAllAssociative();
+        // $stmt->free();
+        
         unset($stmt, $key, $cache, $query, $config);
         return $data;
     }
@@ -78,11 +80,12 @@ class DBConn
     {
         $conn = $this->conn;
         $sql = $this->queryBuilder->getSQL();
-        // 为了兼容我们服务器的版本不同，都用7.1的调用方式
-        // $rs = $conn->fetchAllAssociative($sql, $params, $types);
+       
         $stmt = $conn->executeQuery($sql, $params, $types);
         $rs = $stmt->fetchAll();
-        $stmt->free();
+        /* 为了兼容我们服务器的版本不同，都用7.1的调用方式 */
+        // $rs = $conn->fetchAllAssociative($sql, $params, $types);
+        // $stmt->free();
         unset($stmt, $sql);
         return $rs;
     }
