@@ -6,4 +6,6 @@ composer.lock
 /src/tests/*.log
 /src/tests/test*.php
 /src/*.log
+.vscode
+sched
 

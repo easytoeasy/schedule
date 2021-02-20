@@ -69,18 +69,19 @@ class Process
     {
         // 父进程还在，不让重启
         if ($this->isMasterAlive()) {
-            exit('master still alive');
+            echo 'master still alive' . PHP_EOL;
+            exit(-1);
         }
 
         $pid = pcntl_fork();
         if ($pid < 0) {
             throw new ErrorException('fork error');
-            exit;
+            exit(-1);
         } elseif ($pid > 0) {
-            exit;
+            exit(-1);
         }
         if (!posix_setsid()) {
-            exit;
+            exit(-1);
         }
 
         /* 引用：理论上一次fork就可以了
@@ -411,10 +412,8 @@ class Process
     protected function isMasterAlive()
     {
         if (!is_file($this->ppidFile)) return false;
-        $ppid = file_get_contents($this->ppidFile);
-        $isAlive = Helper::isProcessAlive($ppid);
-        if (!$isAlive) return false;
-        return true;
+        $pid = file_get_contents($this->ppidFile);
+        return `ps aux | awk '{print $2}' | grep -w $pid`;
     }
 
     /**
@@ -501,7 +500,6 @@ class Process
             ob_start(null, null, PHP_OUTPUT_HANDLER_CLEANABLE | PHP_OUTPUT_HANDLER_REMOVABLE);
             require $sourcePath;
             $response = ob_get_contents();
-            // ob_clean();
             ob_end_clean();
         } catch (Throwable $e) {
             $response = $e->__toString();

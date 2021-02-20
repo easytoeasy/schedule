@@ -1,0 +1,92 @@
+#!/bin/sh
+
+# Process.php的绝对路径
+prog="path of Process.php"
+# 定时脚本的server_id
+server_id=$2
+# 随意取
+name="Schedule server_$server_id"
+# php命令
+exec=/usr/bin/php 
+# 必须和项目的pid文件保持一致
+pidfile=/var/run/schedule$server_id.pid
+
+# -z 判断 string 是否是空串
+# -n 判断 string 是否是非空串
+[ -z $2 ] && {
+    echo "empty of server_id"
+    exit 4
+}
+
+if [ $server_id -le 0 ]; then
+    echo "invalid value of server_id: $2."
+    exit 4
+fi
+
+start() {
+    if [ $UID -ne 0 ]; then
+        echo "User has insufficient privilege."
+        exit 4
+    fi
+    [ -x $exec ] || {
+        echo "can't execute:$exec"
+        exit 5
+    }
+    # echo $"Starting $name: "
+    $exec $prog $server_id > /dev/null 2&>1
+    retval=$?
+    [ $retval -eq 0 ] && echo "Start OK"
+}
+
+stop() {
+    if [ $UID -ne 0 ] ; then
+        echo "User has insufficient privilege."
+        exit 4
+    fi
+    if [ ! -f $pidfile ]; then
+        echo "has no such pidfile:$pidfile."
+        exit 4
+    fi
+    echo $"Stopping $name: "
+    pid=`cat $pidfile`
+	if [ -n "`ps aux | awk '{print $2}' | grep -w $pid`" ]; then
+		rs=`kill -15 $pid`
+        [ -n $rs ] && rm -f $pidfile
+	else
+		echo $"Stopping Failed"
+        RETVAL=3
+	fi
+    retval=$?
+    [ $retval -eq 0 ] && echo "Stopped OK"
+}
+
+status() {
+    if [ ! -f $pidfile ]; then
+        echo "has no such pidfile:$pidfile."
+        exit 4
+    fi
+
+    pid=`cat $pidfile`
+	if [ -n "`ps aux | awk '{print $2}' | grep -w $pid`" ]; then
+		echo "$name pid:$pid is running..."
+    else
+        echo "$name is stopped."
+	fi
+}
+
+case "$1" in
+start)
+    $1
+    ;;
+stop)
+    $1
+    ;;
+status)
+    $1
+    ;;
+*)
+    echo $"Usage: $0 {start|stop|status}"
+    exit 2
+    ;;
+esac
+exit $?

@@ -25,12 +25,14 @@ class Helper
 
     public static function isProcessAlive($pid)
     {
-        if (empty($pid)) return false;
-        $pidinfo = `ps co pid {$pid} | xargs`;
-        $pidinfo = trim($pidinfo);
-        $pattern = "/.*?PID.*?(\d+).*?/";
-        preg_match($pattern, $pidinfo, $matches);
-        return empty($matches) ? false : ($matches[1] == $pid ? true : false);
+        // if (empty($pid)) return false;
+        // $pidinfo = `ps co pid {$pid} | xargs`;
+        // $pidinfo = trim($pidinfo);
+        // $pattern = "/.*?PID.*?(\d+).*?/";
+        // preg_match($pattern, $pidinfo, $matches);
+        // return empty($matches) ? false : ($matches[1] == $pid ? true : false);
+        $rs = `ps aux | awk '{print $2}' | grep -w $pid`;
+        return $rs;
     }
 
     /**
