@@ -33,7 +33,7 @@ start() {
         exit 5
     }
     # echo $"Starting $name: "
-    $exec $prog $server_id > /dev/null 2&>1
+    $exec $prog $server_id > /dev/null 2>&1
     retval=$?
     [ $retval -eq 0 ] && echo "Start OK"
 }
