@@ -69,19 +69,17 @@ class Process
     {
         // 父进程还在，不让重启
         if ($this->isMasterAlive()) {
-            echo 'master still alive' . PHP_EOL;
-            exit(-1);
+            exit('master still alive');
         }
 
         $pid = pcntl_fork();
         if ($pid < 0) {
             throw new ErrorException('fork error');
-            exit(-1);
         } elseif ($pid > 0) {
-            exit(-1);
+            exit(0);
         }
         if (!posix_setsid()) {
-            exit(-1);
+            exit(3);
         }
 
         /* 引用：理论上一次fork就可以了
