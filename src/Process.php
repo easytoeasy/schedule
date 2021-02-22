@@ -44,7 +44,7 @@ class Process
     /** 该Process的日志文件 */
     protected $logfile;
     /** 日志级别，支持web改变，便于在线测试 */
-    protected $level;
+    // protected $level;
     protected $http;
     /** 保存父进程退出之前的子进程pid */
     protected $saveChildpids = __DIR__ . '/childsPids.txt';
@@ -485,10 +485,10 @@ class Process
         $scriptName = isset($_SERVER['SCRIPT_NAME']) ? $_SERVER['SCRIPT_NAME'] : '';
         $scriptName = in_array($scriptName, ['', '/']) ? '/index.php' : $scriptName;
         if ($scriptName == '/index.html') {
-            if (isset($_GET['level']) && $_GET['level'] != $this->level) {
-                $this->level = $_GET['level'];
-                $this->logger = Helper::getLogger('Schedule', $this->logfile, $_GET['level']);
-            }
+            // if (isset($_GET['level']) && $_GET['level'] != $this->level) {
+            //     $this->level = $_GET['level'];
+            //     $this->logger = Helper::getLogger('Schedule', $this->logfile, $_GET['level']);
+            // }
             $location = sprintf("%s://%s:%s", 'http', $this->server->host, $this->server->port);
             return $this->http->status_301($location);
         }

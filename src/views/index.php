@@ -23,7 +23,8 @@ use Monolog\Logger;
         <?= $this->message ?>
         <span style="float:right">
           <font style="color: gray;">
-            serverId:<?= $this->serverId ?>, ppid:<?= getmypid() ?>, createAt:<?= $this->createAt ?>, outofMin: <?= $this->outofMin ?>, beDelIds:<?= count($this->beDelIds) ?>, childPids:<?= count($this->childPids) ?>, level:<?=Logger::getLevelName($this->level)?>
+            serverId:<?= $this->serverId ?>, ppid:<?= getmypid() ?>, createAt:<?= $this->createAt ?>, outofMin: <?= $this->outofMin ?>, beDelIds:<?= count($this->beDelIds) ?>, childPids:<?= count($this->childPids) ?>
+            <!-- , level:<?=Logger::getLevelName($this->level)?> -->
           </font>
         </span>
       </div>
@@ -46,13 +47,13 @@ use Monolog\Logger;
             ?>
           </select>
         </li>
-        <li class="action-button">
+        <!-- <li class="action-button">
             <select id='level' name='level'>
               <option value="<?=Logger::DEBUG?>">DEBUG</option>
               <option value="<?=Logger::INFO?>">INFO</option>
               <option value="<?=Logger::ERROR?>">ERROR</option>
             </select>
-        </li>
+        </li> -->
         <li class="action-button"><a href="index.html?action=clear">clear log</a></li>
       </ul>
 
