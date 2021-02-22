@@ -123,7 +123,7 @@ class Parser
         $output = $config['base']['output'];
         if (empty($output))
             throw new ErrorException('invalid value of output');
-        
+
         if (strpos($output, '{%d}') === false)
             throw new ErrorException(sprintf("output %s must include '{\%d}'", $output));
 
@@ -148,6 +148,14 @@ class Parser
         $config = $this->getConfig();
         $server = $config['server_' . $this->serverId];
         return new Server($server);
+    }
+
+    public function getMemoryLimit()
+    {
+        $config = parse_ini_file($this->inifile);
+        return isset($config['memory_limit'])
+            ? intval($config['memory_limit'])
+            : 1024;
     }
 
     /**
@@ -200,7 +208,7 @@ class Parser
 
     /**
      * Get the value of level
-     */ 
+     */
     public function getLevel()
     {
         return $this->level;

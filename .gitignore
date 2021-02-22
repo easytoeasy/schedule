@@ -8,4 +8,5 @@ composer.lock
 /src/*.log
 .vscode
 sched
+/src/childsPids.txt
 

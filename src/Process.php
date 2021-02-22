@@ -46,6 +46,9 @@ class Process
     /** 日志级别，支持web改变，便于在线测试 */
     protected $level;
     protected $http;
+    /** 保存父进程退出之前的子进程pid */
+    protected $saveChildpids = __DIR__ . '/childsPids.txt';
+    protected $preChildpids = array();
 
     public function __construct($serverId)
     {
@@ -99,24 +102,6 @@ class Process
 
         @cli_set_process_title('Schedule server_' . $this->serverId);
 
-
-        /**
-         * 1）无法捕获到require中的错误
-         * 2）无法捕获到DBAL中的异常，但是通过try/catch 主进程的入口函数可以捕获到
-         */
-        /* set_error_handler(function ($errno, $errstr, $errfile, $errline) {
-            if (!(error_reporting(E_ALL & ~E_WARNING & ~E_NOTICE) & $errno)) {
-                return false;
-            }
-            $this->logger->error(sprintf(
-                "%s, %s, %s, %s",
-                $errno,
-                $errstr,
-                $errfile,
-                $errline
-            ));
-        }); */
-
         $stream = new Stream($this->server->host, $this->server->port);
         // 将主进程ID写入文件
         file_put_contents($this->ppidFile, getmypid());
@@ -130,6 +115,12 @@ class Process
          * 2）最好的做法还是结合所有的子进程通过childPid管理，然后循环监控子进程。
          */
         // pcntl_signal(SIGCHLD, [$this, 'sigHandler']);
+        /* 父进程退出之前，将正在执行的子进程pid写入文件。
+         * 在父进程重新启动时检测已启动的子进程，从而防止子进程重复启动 */
+        pcntl_signal(SIGINT,  [$this, 'sigHandler']);
+        pcntl_signal(SIGQUIT, [$this, 'sigHandler']);
+        pcntl_signal(SIGTERM, [$this, 'sigHandler']);
+
 
         $wait = 60;
         $next = 0;
@@ -147,33 +138,26 @@ class Process
                  * 将原 sleep($diff) 改成stream的阻塞
                  * 子进程发出信号时，select阻塞状态会被打断
                  */
-                 $stream->accept($diff, function ($md5, $action) {
+                $stream->accept($diff, function ($md5, $action) {
                     $this->handle($md5, $action);
                     return $this->display();
                 });
 
                 // $this->logger->debug('after stream:' . memory_get_usage());
 
-                /**
-                 * 将进程回收放在这里，则可以每秒钟都触发进程的回收
-                 */
+                // 将进程回收放在这里，则至少可以每秒钟都触发进程的回收.
                 $this->waitpid();
                 // $this->logger->debug('after waitpid:' . memory_get_usage());
                 $stamp = time();
             } while ($stamp < $next);
 
-            // 保障1min内能够执行完，但是如果1min内执行不完呢？
 
             $this->syncFromDB();
             $this->initTasker();
             if (is_file($this->output))
                 file_put_contents($this->output, '');
-            /**
-             * 已经有信号处理器了，为什么还要这个呢？
-             * 防止某个进程没有被信号处理函数处理成为僵尸进程，这里作为一个保障
-             */
-            // $this->waitpid();
-            // 超过限定的每分钟跑一次了
+
+            // 1min+5s内执行不完则记录
             if ($stamp - $next > $wait + $this->extSeconds) {
                 $this->outofMin++;
             }
@@ -190,9 +174,41 @@ class Process
         $db = new Db('db1', $this->server->server);
         $taskers = $db->getJobs($this->serverId);
         $this->servTags = $db->getServTags();
+
+        if ($this->preChildpids)
+            foreach ($this->preChildpids as $pid => $md5) {
+                if (!$this->isAlive($pid)) {
+                    $this->logger->info(sprintf("child pid:%s is stoped.", $pid));
+                    ($this->taskers[$md5])->refcount--;
+                    unset($this->preChildpids[$pid]);
+                    if (empty($this->preChildpids)) {
+                        unlink($this->saveChildpids);
+                    }
+                }
+            }
+
         if (empty($this->taskers)) {
+            // 保护父进程退出后的子进程不会发生重复执行
+            if (
+                is_file($this->saveChildpids) &&
+                ($saveChildPids = file_get_contents($this->saveChildpids))
+            ) {
+                $saveChildPids = json_decode($saveChildPids, true);
+                foreach ($saveChildPids as $pid => $md5) {
+                    if (isset($taskers[$md5]) && $this->isAlive($pid)) {
+                        $this->logger->info(sprintf("child pid:%s still running...", $pid));
+                        ($taskers[$md5])->refcount++;
+                        ($taskers[$md5])->pid = $pid;
+                        ($taskers[$md5])->state = State::WAITING;
+                        // 不是当前父进程的子进程，保证还能够refcount--
+                        $this->preChildpids[$pid] = $md5;
+                    }
+                }
+            }
             $this->taskers = $taskers;
         }
+
+
 
         // DB里面变更的命令
         $newAdds = array_diff_key($taskers, $this->taskers);
@@ -279,8 +295,8 @@ class Process
         }
         if ($c->refcount >= $c->max_concurrence) {
             $this->logger->debug(sprintf(
-                "pid %s is %s, max is %s, refcount is %s",
-                $c->pid,
+                "id %s is %s, max:refcount(%s:%s)",
+                $c->id,
                 State::$desc[$c->state],
                 $c->max_concurrence,
                 $c->refcount
@@ -357,49 +373,51 @@ class Process
         pcntl_signal_dispatch();
         foreach ($this->childPids as $pid => $md5) {
             $result = pcntl_waitpid($pid, $status, WNOHANG);
-            if ($result == $pid || $result == -1) {
-                unset($this->childPids[$pid]);
-                if (!isset($this->taskers[$md5])) continue;
-                // $normal = pcntl_wexitstatus($status);
-                $code = pcntl_wexitstatus($status);
-                $c = &$this->taskers[$md5];
-                /**
-                 * @see https://www.jb51.net/article/73377.htm
-                 * 0 正常退出
-                 * 1 一般性未知错误
-                 * 2 不适合的shell命令
-                 * 126 调用的命令无法执行
-                 * 127 命令没找到
-                 * 128 非法参数导致退出
-                 * 128+n Fatal error signal ”n”：如`kill -9` 返回137
-                 * 130 脚本被`Ctrl C`终止
-                 * 255 脚本发生了异常退出了。那么为什么是255呢？因为状态码的范围是0-255，超过了范围。
-                 */
-                switch ($code) {
-                    case 1:
-                        $state = State::EXITED;
-                        break;
-                    case 126:
-                    case 127:
-                        $state = State::FATAL;
-                        break;
-                    case 255:
-                        $state = State::UNKNOWN;
-                        break;
-                    default:
-                        break;
-                }
-                if ($code != 0) { //正常退出是0
-                    $this->logger->error(sprintf("the id %s,pid %s exited unexcepted about code %s", $c->id, $pid, $code));
-                    $c->state = $state;
-                } else {
-                    $c->state = $c->state == State::DELETING ?: State::STOPPED;
-                }
-                $c->refcount--;
-                $c->pid = '';
-                $c->endtime = date('m/d H:i');
-                unset($state, $code, $key);
+            if ($result != $pid && $result != -1) {
+                unset($result);
+                continue;
             }
+            unset($this->childPids[$pid]);
+            if (!isset($this->taskers[$md5])) continue;
+            // $normal = pcntl_wexitstatus($status);
+            $code = pcntl_wexitstatus($status);
+            $c = &$this->taskers[$md5];
+            /**
+             * @see https://www.jb51.net/article/73377.htm
+             * 0 正常退出
+             * 1 一般性未知错误
+             * 2 不适合的shell命令
+             * 126 调用的命令无法执行
+             * 127 命令没找到
+             * 128 非法参数导致退出
+             * 128+n Fatal error signal ”n”：如`kill -9` 返回137
+             * 130 脚本被`Ctrl C`终止
+             * 255 脚本发生了异常退出了。那么为什么是255呢？因为状态码的范围是0-255，超过了范围。
+             */
+            switch ($code) {
+                case 1:
+                    $state = State::EXITED;
+                    break;
+                case 126:
+                case 127:
+                    $state = State::FATAL;
+                    break;
+                case 255:
+                    $state = State::UNKNOWN;
+                    break;
+                default:
+                    break;
+            }
+            if ($code != 0) { //正常退出是0
+                $this->logger->error(sprintf("the id %s,pid %s exited unexcepted about code %s", $c->id, $pid, $code));
+                $c->state = $state;
+            } else {
+                $c->state = $c->state == State::DELETING ?: State::STOPPED;
+            }
+            $c->refcount--;
+            $c->pid = '';
+            $c->endtime = date('m/d H:i');
+            unset($state, $code, $key);
             unset($result, $pid, $md5, $status);
         }
     }
@@ -411,7 +429,7 @@ class Process
     {
         if (!is_file($this->ppidFile)) return false;
         $pid = file_get_contents($this->ppidFile);
-        return `ps aux | awk '{print $2}' | grep -w $pid`;
+        return $this->isAlive($pid);
     }
 
     /**
@@ -467,11 +485,10 @@ class Process
         $scriptName = isset($_SERVER['SCRIPT_NAME']) ? $_SERVER['SCRIPT_NAME'] : '';
         $scriptName = in_array($scriptName, ['', '/']) ? '/index.php' : $scriptName;
         if ($scriptName == '/index.html') {
-            // if (isset($_GET['level']) && $_GET['level'] != $this->level) {
-            //     $this->level = $_GET['level'];
-            //     $this->logger = null;
-            //     $this->logger = Helper::getLogger('Schedule', $this->logfile, $_GET['level']);
-            // }
+            if (isset($_GET['level']) && $_GET['level'] != $this->level) {
+                $this->level = $_GET['level'];
+                $this->logger = Helper::getLogger('Schedule', $this->logfile, $_GET['level']);
+            }
             $location = sprintf("%s://%s:%s", 'http', $this->server->host, $this->server->port);
             return $this->http->status_301($location);
         }
@@ -502,51 +519,46 @@ class Process
         } catch (Throwable $e) {
             $response = $e->__toString();
         }
-        
+
         // $this->logger->debug('after source:' . memory_get_usage());
         unset($sourcePath);
         return $this->http->status_200($response);
     }
 
-    /**
-     * 
-     * 1）stream_select会被打断
-     * 2）tail.php中的`tail`命令产生的子进程会被这里捕获到
-     * 
-     * @param int $signo
-     * @param array $siginfo
-     * 
-     * siginfo: {"signo":20,"errno":0,"code":1,"status":0,"pid":16769,"uid":501}
-     */
+    /* 只监听父进程退出状态，并将childPids保存到文件。
+     * 下次启动时防止重复启动 */
     public function sigHandler($signo, $siginfo)
     {
-        if ($signo != SIGCHLD) return;
-        $pid = $siginfo['pid'];
-        $result = pcntl_waitpid($pid, $status, WNOHANG);
-        if ($result == $pid || $result == -1) {
-            if (!isset($this->childPids[$pid])) return;
-            $md5 = $this->childPids[$pid];
-            unset($this->childPids[$pid]);
-            if (!isset($this->taskers[$md5])) return;
-            $c = &$this->taskers[$md5];
-            $c->refcount--;
-            $c->pid = '';
-            $c->state = State::STOPPED;
-        }
+        if ($this->childPids)
+            file_put_contents($this->saveChildpids, json_encode($this->childPids));
+        exit(0);
     }
+
+    protected function isAlive($pid)
+    {
+        if (empty($pid)) return false;
+        return `ps aux | awk '{print $2}' | grep -w $pid`;
+    }
+}
+
+if (PHP_SAPI != 'cli') {
+    throw new ErrorException('非cli模式不可用');
 }
 
 error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING);
 require dirname(__DIR__) . '/vendor/autoload.php';
 date_default_timezone_set('Asia/Shanghai');
 
-if (PHP_SAPI != 'cli') {
-    throw new ErrorException('非cli模式不可用');
-}
 
-// 当前进程创建的文件权限为755
+$parser = new Parser();
+$memoryLimit = $parser->getMemoryLimit();
+@ini_set('error_reporting', E_ALL & ~E_NOTICE & ~E_WARNING);
+if (ini_set('memory_limit', $memoryLimit . 'M') === false) {
+    exit('ini set memory limit faild');
+}
+unset($parser, $memoryLimit);
+// 当前进程创建的文件权限为777
 umask(0);
-ini_set('error_reporting', E_ALL & ~E_NOTICE & ~E_WARNING);
 
 $serverId = $argv[1];
 if (empty($serverId) || !is_numeric($serverId)) {
@@ -554,4 +566,5 @@ if (empty($serverId) || !is_numeric($serverId)) {
 }
 
 $cli = new Process($serverId);
+unset($serverId);
 $cli->run();
