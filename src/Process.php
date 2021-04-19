@@ -267,9 +267,14 @@ class Process
                 continue;
             }
 
-            $cronExpression = CronExpression::factory($c->cron);
-            if ($cronExpression->isDue()) {
-                $this->fork($c);
+            try {
+                $cronExpression = CronExpression::factory($c->cron);
+                if ($cronExpression->isDue()) {
+                    $this->fork($c);
+                }
+            } catch (Exception $e) {
+                $this->logger->error('cronExpression:' . $e->getMessage());
+                continue;
             }
         }
     }
@@ -287,12 +292,18 @@ class Process
             return false;
         }
         // 说明设置的定时任务内没跑完
-        if (
-            $c->state == State::RUNNING
-            && CronExpression::factory($c->cron)->isDue()
-        ) {
-            $c->outofCron++;
+        try {
+            if (
+                $c->state == State::RUNNING
+                && CronExpression::factory($c->cron)->isDue()
+            ) {
+                $c->outofCron++;
+            }
+        } catch (Exception $e) {
+            $this->logger->error('cronExpression:' . $e->getMessage());
+            return false;
         }
+
         if ($c->refcount >= $c->max_concurrence) {
             $this->logger->debug(sprintf(
                 "id %s is %s, max:refcount(%s:%s)",

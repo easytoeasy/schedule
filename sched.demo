@@ -50,14 +50,11 @@ stop() {
     echo $"Stopping $name: "
     pid=`cat $pidfile`
 	if [ -n "`ps aux | awk '{print $2}' | grep -w $pid`" ]; then
-		rs=`kill -15 $pid`
-        [ -n $rs ] && rm -f $pidfile
+		retval=`kill -15 $pid`
+        [ $retval -eq 0 ] && echo "Stopped OK"
 	else
 		echo $"Stopping Failed"
-        RETVAL=3
 	fi
-    retval=$?
-    [ $retval -eq 0 ] && echo "Stopped OK"
 }
 
 status() {
