@@ -14,10 +14,9 @@ class Db
      * @param string $name DB name
      * @param int $server 服务器编号
      */
-    public function __construct($name, $server)
+    public function __construct()
     {
-        $this->dbConn = new DBConn($name);
-        $this->server = $server;
+        $this->dbConn = new DBConn();
     }
 
     /**
@@ -38,7 +37,7 @@ class Db
             // ->setParameter(0, $server)
             ->where('server_id = ?');
 
-        $vars = $dbConn->executeCacheQuery(0, [$this->server]);
+        $vars = $dbConn->executeCacheQuery(0, [SERVER_VAR_ID]);
         $rs = [];
         foreach ($vars as $v) {
             $key = '{' . $v['name'] . '}';
@@ -71,9 +70,8 @@ class Db
      * @param int $serverId 确切的说是对jobs下命令的分类，由于是线上库，就不在改字段
      * @return array
      */
-    public function getJobs($serverId)
+    public function getJobs()
     {
-        if (empty($serverId)) return false;
         $dbConn = $this->dbConn;
         $fields = [
             'id', 'name', 'command', 'cron', 'output', 'max_concurrence', 'server_id', 'tag_id', 'stderr'
@@ -85,7 +83,7 @@ class Db
             ->andWhere('status = 1');
 
         // $data = $dbConn->fetchAll([$serverId]);
-        $data = $dbConn->executeCacheQuery(120, [$serverId]);
+        $data = $dbConn->executeCacheQuery(120, [SERVER_ID]);
         $tags = $this->getTags();
         $vars = $this->getVars();
         $jobs = [];

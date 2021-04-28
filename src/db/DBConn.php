@@ -15,27 +15,10 @@ class DBConn
     protected $conn;
     protected $queryBuilder;
 
-    public function __construct($module)
+    public function __construct()
     {
-        $this->module = $module;
         /* 每分钟初始化一次DB连接 */
-        $this->conn = $this->connection();
-    }
-
-    /**
-     * 之前碰到过的问题
-     * 1）小心太多数据库链接数
-     * 2）丢失连接
-     */
-    protected function connection()
-    {
-        if (empty($this->module))
-            throw new ErrorException('params of module is empty');
-
-        $parser = new Parser();
-        $dbConfig = $parser->getDBConfig($this->module);
-        unset($parser);
-        return DriverManager::getConnection($dbConfig);
+        $this->conn = DriverManager::getConnection(DBCONFIG);
     }
 
     public function executeCacheQuery(int $cachetime = 120, $params = [], $types = [])
