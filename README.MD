@@ -89,3 +89,10 @@ server = 1
 - 最大并行数量的控制。
 - web访问控制。
 - 支持分布式服务。
+
+
+跟踪调试：
+
+1、跟踪TCP的情况：`sudo tcpdump -i any tcp port 3499`
+观察`keepalve`和非长连接的情况。
+2、观察进程的内存占用：`top -p pid` || mac `top -pid pid`

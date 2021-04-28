@@ -4,19 +4,18 @@ namespace pzr\schedule;
 
 class Http
 {
-    public $basePath = __DIR__ . '/views';
-    public $max_age = 120; //秒
+    public static $basePath = __DIR__ . '/views';
+    public static $max_age = 120; //秒
 
     /*
     *  函数:     parse_http
     *  描述:     解析http协议
     */
-    public function parse_http($http)
+    public static function parse_http($http)
     {
         // 初始化
-        // $_POST = $_GET = $_COOKIE = $_REQUEST = $_SESSION = $_FILES =  array();
+        $_POST = $_GET = $_COOKIE = $_REQUEST = $_SESSION = $_FILES =  array();
         // $GLOBALS['HTTP_RAW_POST_DATA'] = '';
-        $_GET = $_SERVER = [];
         // 需要设置的变量名
         $_SERVER = array(
             'QUERY_STRING' => '',
@@ -53,12 +52,11 @@ class Http
                 $_SERVER['CONTENT_TYPE'] = 'text/css';
                 break;
             case 'gif':
-                $_SERVER['CONTENT_TYPE'] = 'image/gif';
-                break;
             case 'png':
-                $_SERVER['CONTENT_TYPE'] = 'image/png';
+                $_SERVER['CONTENT_TYPE'] = 'image/' . $suffix;
                 break;
             default:
+                // $_SERVER['CONTENT_TYPE'] = 'text/html';
                 break;
         }
 
@@ -135,16 +133,17 @@ class Http
         // return array('get' => $_GET, 'post' => $_POST, 'cookie' => $_COOKIE, 'server' => $_SERVER, 'files' => $_FILES);
     }
 
-    public function status_404()
+    public static function status_404()
     {
         return <<<EOF
 HTTP/1.1 404 OK
 content-type: text/html
 
+
 EOF;
     }
 
-    public function status_301($location)
+    public static function status_301($location)
     {
         return <<<EOF
 HTTP/1.1 301 Moved Permanently
@@ -153,10 +152,11 @@ Content-Type: text/plain
 Location: $location
 Cache-Control: no-cache
 
+
 EOF;
     }
 
-    public function status_304()
+    public static function status_304()
     {
         return <<<EOF
 HTTP/1.1 304 Not Modified
@@ -165,21 +165,20 @@ Content-Length: 0
 EOF;
     }
 
-    public function status_200($response)
+    public static function status_200($response)
     {
         $contentType = $_SERVER['CONTENT_TYPE'];
         $length = strlen($response);
-        $header = $contentType ? 'Cache-Control: max-age=180' : '';
-        // $etag = md5($response);
-        // ETag: $etag
+        $cache = $contentType != '' && $contentType != 'text/plain' ? 'max-age=600' : 'no-cache';
+        $keepalive = $_SERVER['HTTP_CONNECTION'] == 'keep-alive' ? 'keep-alive' : 'close';
         return <<<EOF
 HTTP/1.1 200 OK
 Content-Type: $contentType
 Content-Length: $length
-$header
+Cache-Control: $cache
+connection: $keepalive
 
 $response
 EOF;
-
     }
 }

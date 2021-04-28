@@ -3,119 +3,72 @@
 namespace pzr\schedule;
 
 use Closure;
-use ErrorException;
 
 class Stream
 {
-	protected $socket;
-	protected $timeout = 2; //s
+	protected $fd;
 	protected $client;
-	// protected $logger;
-	protected $http;
 
-	const TCP = 'tcp';
-	const UDP = 'udp';
-
-	public function __construct($host, $port)
+	public function __construct()
 	{
-		//$this->logger = Helper::getLogger('Stream', '/var/log/schedule99.log');
-		//$this->logger->debug('stream start:' . memory_get_usage());
-		$host = sprintf("%s://%s:%s", self::TCP, $host, $port);
-		$this->socket = $this->connect($host);
-		$this->http = new Http();
-	}
-
-	public function connect($host)
-	{
-		$context_option = [
-			'socket' => ['backlog' => 10240,], //等待处理连接的队列
-		];
-		$context = stream_context_create($context_option);
-		stream_context_set_option($context, 'socket', 'so_reuseaddr', 1);
-		stream_context_set_option($context, 'socket', 'so_reuseport', 1);
-		$socket = stream_socket_server($host, $errno, $errstr, STREAM_SERVER_BIND | STREAM_SERVER_LISTEN, $context);
-		if (!$socket) {
-			throw new ErrorException(sprintf("stream bind error, code:%s, errstr:%s", $errno, $errstr));
+		if (($fd = socket_create(AF_INET, SOCK_STREAM, SOL_TCP)) === false) {
+			$this->errstr($fd);
 		}
-		stream_set_timeout($socket, $this->timeout);
-		// stream_set_chunk_size($socket, 1024);
-		stream_set_blocking($socket, false);
-		$this->client = [$socket];
-		return $socket;
+
+		socket_set_option($fd, SOL_SOCKET, SO_REUSEADDR, 1);
+		socket_set_option($fd, SOL_SOCKET, SO_REUSEPORT, 1);
+		socket_set_option($fd, SOL_SOCKET, SO_KEEPALIVE, 1);
+		if (socket_set_nonblock($fd) === false) {
+			$this->errstr($fd);
+		}
+
+		if (socket_bind($fd, HOST, PORT) === false) {
+			$this->errstr($fd);
+		}
+
+		if (socket_listen($fd, BACKLOG) === false) {
+			$this->errstr($fd);
+		}
+		$this->fd = $fd;
+		$this->client = [$fd];
 	}
 
 	public function accept($sec, Closure $callback)
 	{
 		$read = $this->client;
 		$write = $except = [];
-		if (@stream_select($read, $write, $except, $sec) < 1) return;
-		//$this->logger->info('before accept:' . memory_get_usage());
-		if (in_array($this->socket, $read)) {
-			$cs = stream_socket_accept($this->socket);
-			$this->client[] = $cs;
+		if (socket_select($read, $write, $except, $sec) < 1) return;
+		if (in_array($this->fd, $read)) {
+			$cfd = socket_accept($this->fd);
+			$this->client[] = $cfd;
 		}
-		foreach ($read as $s) {
-			if ($s == $this->socket) continue;
-
-			$header = fread($s, 1024);
+		foreach ($read as $fd) {
+			if ($fd == $this->fd) continue;
+			$header = socket_read($fd, 4096);
 			if (empty($header)) {
-				$index = array_search($s, $this->client);
-				if ($index)
-					unset($this->client[$index]);
-				$this->endConn($s);
+				$index = array_search($fd, $this->client);
+				socket_close($fd);
+				unset($this->client[$index]);
 				continue;
 			}
-			$this->http->parse_http($header);
-			$md5 = isset($_GET['md5']) ? $_GET['md5'] : '';
-			$action = isset($_GET['action']) ? $_GET['action'] : '';
-			$response = $callback($md5, $action);
-			$this->write($s, $response);
-			$index = array_search($s, $this->client);
-			if ($index)
-				unset($this->client[$index]);
-			$this->endConn($s);
+			Http::parse_http($header);
+			$response = $callback();
+			socket_write($fd, $response);
+			// $index = array_search($fd, $this->client);
+			// socket_close($fd);
+			// unset($this->client[$index]);
 		}
 		unset($response, $_GET, $_SERVER, $header);
-		//$this->logger->debug('after accept:' . memory_get_usage());
 	}
 
-	public function write($socket, $response)
+	private function errstr($fd)
 	{
-		return fwrite($socket, $response, strlen($response));
-	}
-
-	public function endConn($cliSock)
-	{
-		return fclose($cliSock);
-	}
-
-	public function close()
-	{
-		return $this->endConn($this->socket);
-	}
-
-	
-
-
-
-	/**
-	 * Get the value of socket
-	 */
-	public function getSocket()
-	{
-		return $this->socket;
-	}
-
-	/**
-	 * Get the value of client
-	 */ 
-	public function getClient()
-	{
-		return $this->client;
+		Logger::error(socket_strerror(socket_last_error($fd)));
+		exit(4);
 	}
 
 	public function __destruct()
 	{
-		$this->close();
+		$this->fd && socket_close($this->fd);
 	}
 }

@@ -7,21 +7,6 @@ use Monolog\Logger;
 
 class Helper
 {
-    /**
-     * @param String $name
-     * @param string $file
-     * @param int $level
-     * @return Logger
-     */
-    public static function getLogger($name, $file = '', $level = Logger::DEBUG)
-    {
-        $handler = new FileHandler($file, $level);
-        $logger = new Logger($name, [$handler]);
-        $logger->setTimezone(new DateTimeZone('Asia/Shanghai'));
-        $logger->useMicrosecondTimestamps(false);
-        unset($handler);
-        return $logger;
-    }
 
     public static function isProcessAlive($pid)
     {

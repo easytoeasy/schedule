@@ -1,6 +1,8 @@
 <?php
 
-use Monolog\Logger;
+use pzr\schedule\db\Job;
+use pzr\schedule\Logger;
+use pzr\schedule\State;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -11,6 +13,7 @@ use Monolog\Logger;
   <link href="css/supervisor.css" rel="stylesheet" type="text/css">
   <link href="images/icon.png" rel="icon" type="image/png">
 </head>
+
 <body>
   <div id="wrapper">
 
@@ -23,8 +26,14 @@ use Monolog\Logger;
         <?= $this->message ?>
         <span style="float:right">
           <font style="color: gray;">
-            serverId:<?= $this->serverId ?>, ppid:<?= getmypid() ?>, createAt:<?= $this->createAt ?>, outofMin: <?= $this->outofMin ?>, beDelIds:<?= count($this->beDelIds) ?>, childPids:<?= count($this->childPids) ?>
-            <!-- , level:<?=Logger::getLevelName($this->level)?> -->
+            servId:<?= SERVER_ID ?>,
+            pid:<?= getmypid() ?>,
+            at:<?= $this->createAt ?>,
+            outMin: <?= $this->outofMin ?>,
+            beDelIds:<?= count($this->beDelIds) ?>,
+            childPids:<?= count($this->childPids) ?>
+            mem:<?= round(memory_get_usage()/1024/1024, 2) . 'M' ?>
+            used:<?= round(memory_get_usage(true)/1024/1024, 2) . 'M' ?>
           </font>
         </span>
       </div>
@@ -36,10 +45,11 @@ use Monolog\Logger;
           <select id='tagid' onchange="tagChange()">
             <option value="0">全部</option>
             <?php
-            $searchTagid = isset($_GET['tagid']) ? $_GET['tagid'] : 0;
+            $tagid = $_GET['tagid'] ?? 0;
+
             foreach ($this->servTags as $id => $name) {
               $selected = '';
-              if ($searchTagid == $id) {
+              if ($tagid == $id) {
                 $selected = 'selected';
               }
               printf("<option %s value=%s>%s</option>", $selected, $id, $name);
@@ -47,13 +57,6 @@ use Monolog\Logger;
             ?>
           </select>
         </li>
-        <!-- <li class="action-button">
-            <select id='level' name='level'>
-              <option value="<?=Logger::DEBUG?>">DEBUG</option>
-              <option value="<?=Logger::INFO?>">INFO</option>
-              <option value="<?=Logger::ERROR?>">ERROR</option>
-            </select>
-        </li> -->
         <li class="action-button"><a href="index.html?action=clear">clear log</a></li>
       </ul>
 
@@ -69,16 +72,11 @@ use Monolog\Logger;
 
         <tbody>
           <?php
-
-          use pzr\schedule\State;
-
-          $id = isset($_GET['id']) ? $_GET['id'] : 0;
+          $id = $_GET['id'] ?? 0;
           if ($this->taskers)
             /** @var Job $c */
             foreach ($this->taskers as $c) {
-              if ($searchTagid && $c->tag_id != $searchTagid) {
-                continue;
-              }
+              if ($tagid && $c->tag_id != $tagid) continue;
               if ($id && $c->id != $id) continue;
           ?>
             <tr class="shade">
@@ -91,11 +89,11 @@ use Monolog\Logger;
                 <ul>
                   <?php if (in_array($c->state, State::runingState())) { ?>
                     <li>
-                      <a href="index.html?md5=<?= $c->md5 ?>&action=stop" name="Stop">Stop</a>
+                      <a href="<?= $this->doAction('stop', $c) ?>" name="Stop">Stop</a>
                     </li>
                   <?php } else { ?>
                     <li>
-                      <a href="index.html?md5=<?= $c->md5 ?>&action=start" name="Start">Start</a>
+                      <a href="<?= $this->doAction('start', $c) ?>" name="Start">Start</a>
                     </li>
                   <?php } ?>
                   <li>
@@ -112,7 +110,7 @@ use Monolog\Logger;
                 </font>
               </td>
             </tr>
-          <?php  } ?>
+          <?php } ?>
         </tbody>
       </table>
 

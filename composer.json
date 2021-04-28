@@ -23,7 +23,6 @@
     "require": {
         "php": ">=7.0.0",
         "mtdowling/cron-expression": "^1.2",
-        "monolog/monolog": "^2.2",
         "doctrine/dbal": "^3.0"
     },
     "require-dev": {
