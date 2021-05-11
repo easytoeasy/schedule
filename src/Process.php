@@ -149,7 +149,8 @@ class Process
     {
         $db = new Db();
         $taskers = $db->getJobs();
-        if (empty($taskers)) return;
+        // fixed：当子进程任务为空时，也需要处理。
+        // if (empty($taskers)) return;
         $this->servTags = $db->getServTags();
 
         if ($this->preChildpids)
