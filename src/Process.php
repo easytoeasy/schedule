@@ -436,7 +436,7 @@ class Process
     protected function fork(Job &$c)
     {
         $desc[1] = $c->output ? ['file', $c->output, 'a'] : $this->nullfd;
-        $desc[1] = $c->stderr ? ['file', $c->stderr, 'a'] : $this->nullfd;
+        $desc[2] = $c->stderr ? ['file', $c->stderr, 'a'] : $this->nullfd;
         $process = proc_open('exec ' . $c->command, $desc, $pipes, $c->directory);
         if ($process) {
             $ret = proc_get_status($process);
